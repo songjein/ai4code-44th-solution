@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
 
@@ -27,7 +27,7 @@ class MarkdownDataset(Dataset):
         code_inputs = self.tokenizer.batch_encode_plus(
             [str(x) for x in self.fts[row.id]["codes"]],
             add_special_tokens=True,
-            max_length=22, # (512-64)//20
+            max_length=22,  # (512-64)//20
             padding="max_length",
             truncation=True,
         )
