@@ -17,6 +17,56 @@ def read_notebook(path):
     )
 
 
+def get_ranks(gt, derived):
+    return [gt.index(d) for d in derived]
+
+
+def clean_code(cell):
+    return str(cell).replace("\\n", "\n")
+
+
+def sample_cells(cells, n):
+    """
+    .. note::
+        실제로 어떻게 뽑히고 있는지 한 번 확인해볼 필요 있음
+    .. note::
+        더 똑똑하게 추출하기
+    """
+    cells = [clean_code(cell) for cell in cells]
+    if n >= len(cells):
+        return [cell[:200] for cell in cells]
+    else:
+        results = []
+        step = len(cells) / n
+        idx = 0
+        while int(np.round(idx)) < len(cells):
+            results.append(cells[int(np.round(idx))])
+            idx += step
+        assert cells[0] in results
+        if cells[-1] not in results:
+            results[-1] = cells[-1]
+        return results
+
+
+def get_features(df):
+    """
+    .. note::
+        더 똑똑하게 추출하기
+    """
+    features = dict()
+    df = df.sort_values("rank").reset_index(drop=True)
+    for idx, sub_df in tqdm(df.groupby("id")):
+        features[idx] = dict()
+        total_md = sub_df[sub_df.cell_type == "markdown"].shape[0]
+        code_sub_df = sub_df[sub_df.cell_type == "code"]
+        total_code = code_sub_df.shape[0]
+        codes = sample_cells(code_sub_df.source.values, 20)  # 코드셀만 모은 후 거기서 샘플 뽑음
+        features[idx]["total_code"] = total_code
+        features[idx]["total_md"] = total_md
+        features[idx]["codes"] = codes
+    return features
+
+
 if __name__ == "__main__":
     root = f"./data"
     os.makedirs(root, exist_ok=True)
@@ -45,9 +95,6 @@ if __name__ == "__main__":
         how="right",
     )
 
-    def get_ranks(gt, derived):
-        return [gt.index(d) for d in derived]
-
     ranks = {}
     for id_, cell_order, cell_id in merged_df_orders.itertuples():
         ranks[id_] = {"cell_id": cell_id, "rank": get_ranks(cell_order, cell_id)}
@@ -73,7 +120,6 @@ if __name__ == "__main__":
 
     # validation split
     valid_split = 0.1
-
     splitter = GroupShuffleSplit(n_splits=1, test_size=valid_split, random_state=42)
     train_ind, val_ind = next(splitter.split(df_all, groups=df_all["ancestor_id"]))
     df_train = (
@@ -96,43 +142,6 @@ if __name__ == "__main__":
     df_valid_md.to_csv(f"{root}/valid_md.csv", index=False)
     df_train.to_csv(f"{root}/train.csv", index=False)
     df_valid.to_csv(f"{root}/valid.csv", index=False)
-
-    def clean_code(cell):
-        return str(cell).replace("\\n", "\n")
-
-    def sample_cells(cells, n):
-        cells = [clean_code(cell) for cell in cells]
-        if n >= len(cells):
-            return [cell[:200] for cell in cells]
-        else:
-            results = []
-            step = len(cells) / n
-            idx = 0
-            while int(np.round(idx)) < len(cells):
-                results.append(cells[int(np.round(idx))])
-                idx += step
-            assert cells[0] in results
-            if cells[-1] not in results:
-                results[-1] = cells[-1]
-            return results
-
-    def get_features(df):
-        """
-        .. todo::
-            더 똑똑하게 추출하기
-        """
-        features = dict()
-        df = df.sort_values("rank").reset_index(drop=True)
-        for idx, sub_df in tqdm(df.groupby("id")):
-            features[idx] = dict()
-            total_md = sub_df[sub_df.cell_type == "markdown"].shape[0]
-            code_sub_df = sub_df[sub_df.cell_type == "code"]
-            total_code = code_sub_df.shape[0]
-            codes = sample_cells(code_sub_df.source.values, 20)  # 코드셀만 모은 후 거기서 샘플 뽑음
-            features[idx]["total_code"] = total_code
-            features[idx]["total_md"] = total_md
-            features[idx]["codes"] = codes
-        return features
 
     train_feature_transformed_samples = get_features(df_train)
     json.dump(train_feature_transformed_samples, open(f"{root}/train_fts.json", "wt"))
