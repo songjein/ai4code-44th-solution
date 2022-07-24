@@ -31,21 +31,13 @@ class MarkdownDataset(Dataset):
             padding="max_length",
             truncation=True,
         )
-        n_md = self.fts[row.id]["total_md"]
-        n_code = self.fts[row.id]["total_code"]
-        if n_md + n_code == 0:
-            md_ratio = torch.FloatTensor([0])
-        else:
-            md_ratio = torch.FloatTensor([n_md / (n_md + n_code)])
 
         ids = inputs["input_ids"]
         for x in code_inputs["input_ids"]:
             ids.extend(x[:-1])
         ids = ids[: self.total_max_len]
         if len(ids) != self.total_max_len:
-            ids = ids + [
-                self.tokenizer.pad_token_id,
-            ] * (self.total_max_len - len(ids))
+            ids = ids + [self.tokenizer.pad_token_id] * (self.total_max_len - len(ids))
         ids = torch.LongTensor(ids)
 
         mask = inputs["attention_mask"]
@@ -53,14 +45,14 @@ class MarkdownDataset(Dataset):
             mask.extend(x[:-1])
         mask = mask[: self.total_max_len]
         if len(mask) != self.total_max_len:
-            mask = mask + [
-                self.tokenizer.pad_token_id,
-            ] * (self.total_max_len - len(mask))
+            mask = mask + [self.tokenizer.pad_token_id] * (
+                self.total_max_len - len(mask)
+            )
         mask = torch.LongTensor(mask)
 
         assert len(ids) == self.total_max_len
 
-        return ids, mask, md_ratio, torch.FloatTensor([row.pct_rank])
+        return ids, mask, torch.FloatTensor([row.pct_rank])
 
     def __len__(self):
         return self.df.shape[0]
