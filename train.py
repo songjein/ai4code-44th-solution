@@ -46,6 +46,30 @@ def seed_everything(seed=42):
     torch.backends.cudnn.deterministic = True
 
 
+def generate_pairs_with_label(
+    df, mode="train", negative_ratio=0.15, max_num_negative=2048
+):
+    samples = []
+    select_or_not = np.random.random(size=max_num_negative) < negative_ratio
+    for id, df_sub in tqdm(df.groupby("id")):
+        df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
+        df_sub_code = df_sub[df_sub["cell_type"] == "code"]
+        df_sub_code_rank = df_sub_code["rank"].values
+        df_sub_code_cell_id = df_sub_code["cell_id"].values
+        for md_cell_id, md_rank in df_sub_md[["cell_id", "rank"]].values:
+            labels = np.array(
+                [((md_rank + 1) == code_rank) for code_rank in df_sub_code_rank]
+            ).astype("int")
+            for code_cell_id, label in zip(df_sub_code_cell_id, labels):
+                if mode == "test":
+                    samples.append([md_cell_id, code_cell_id, label])
+                elif label == 1:
+                    samples.append([md_cell_id, code_cell_id, label])
+                elif select_or_not[len(samples) % max_num_negative]:
+                    samples.append([md_cell_id, code_cell_id, label])
+    return samples
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
 
