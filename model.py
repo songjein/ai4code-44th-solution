@@ -8,11 +8,10 @@ class PercentileRegressor(nn.Module):
         super(PercentileRegressor, self).__init__()
         self.model = AutoModel.from_pretrained(model_path)
         self.dropout = nn.Dropout(dropout)
-        self.top = nn.Linear(768 + 1, 1)
+        self.top = nn.Linear(768, 1)
 
-    def forward(self, ids, mask, md_ratio):
+    def forward(self, ids, mask):
         x = self.model(ids, mask)[0]
         x = self.dropout(x)
-        x = torch.cat((x[:, 0, :], md_ratio), 1)
-        x = self.top(x)
+        x = self.top(x[:, 0, :])
         return x
