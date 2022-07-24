@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from dataset import PointwiseDataset, PairwiseDataset
+from dataset import PairwiseDataset, PointwiseDataset
 from metrics import kendall_tau
 from model import PercentileRegressor
 
@@ -47,27 +47,30 @@ def seed_everything(seed=42):
     torch.backends.cudnn.deterministic = True
 
 
-def generate_pairs_with_label(
-    df, mode="train", negative_ratio=0.15, max_num_negative=8192
-):
+def generate_pairs_with_label(df, mode="train", pos_neg_times=10):
     samples = []
-    select_or_not = np.random.random(size=max_num_negative) < negative_ratio
     for id, df_sub in tqdm(df.groupby("id")):
         df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
         df_sub_code = df_sub[df_sub["cell_type"] == "code"]
         df_sub_code_rank = df_sub_code["rank"].values
         df_sub_code_cell_id = df_sub_code["cell_id"].values
+        pos_samples = []
+        neg_samples = []
         for md_cell_id, md_rank in df_sub_md[["cell_id", "rank"]].values:
             labels = np.array(
                 [((md_rank + 1) == code_rank) for code_rank in df_sub_code_rank]
             ).astype("int")
             for code_cell_id, label in zip(df_sub_code_cell_id, labels):
                 if mode == "test":
-                    samples.append([md_cell_id, code_cell_id, label])
+                    pos_samples.append([md_cell_id, code_cell_id, label])
                 elif label == 1:
-                    samples.append([md_cell_id, code_cell_id, label])
-                elif select_or_not[len(samples) % max_num_negative]:
-                    samples.append([md_cell_id, code_cell_id, label])
+                    pos_samples.append([md_cell_id, code_cell_id, label])
+                elif label == 0:
+                    neg_samples.append([md_cell_id, code_cell_id, label])
+        random.shuffle(neg_samples)
+        _samples = pos_samples + neg_samples[: len(pos_samples) * pos_neg_times]
+        random.shuffle(_samples)
+        samples += _samples
     return samples
 
 
@@ -263,8 +266,10 @@ if __name__ == "__main__":
                 )
                 print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
             else:
+
                 def sigmoid(z):
-                    return 1/(1 + np.exp(-z))
+                    return 1 / (1 + np.exp(-z))
+
                 y_val, y_pred = validate(model, valid_loader)
                 y_pred = sigmoid(y_pred) > 0.5
                 precision, recall, f1, _ = precision_recall_fscore_support(
