@@ -30,7 +30,7 @@ parser.add_argument("--md_max_len", type=int, default=64)
 parser.add_argument("--total_max_len", type=int, default=512)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--accumulation_steps", type=int, default=4)
-parser.add_argument("--epochs", type=int, default=5)
+parser.add_argument("--epochs", type=int, default=3)
 parser.add_argument("--n_workers", type=int, default=8)
 parser.add_argument("--seed", type=int, default=42)
 
@@ -198,6 +198,7 @@ if __name__ == "__main__":
             valid_df["pred"] = valid_df.groupby(["id", "cell_type"])["rank"].rank(
                 pct=True
             )
+
             valid_df.loc[valid_df["cell_type"] == "markdown", "pred"] = y_pred
             y_dummy = valid_df.sort_values("pred").groupby("id")["cell_id"].apply(list)
             print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
