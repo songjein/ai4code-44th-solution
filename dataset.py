@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
 
-class MarkdownDataset(Dataset):
+class PointwiseDataset(Dataset):
     def __init__(self, df, model_name_or_path, total_max_len, md_max_len, fts):
         super().__init__()
         self.df = df.reset_index(drop=True)

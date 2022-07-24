@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from dataset import MarkdownDataset, PairwiseDataset
+from dataset import PointwiseDataset, PairwiseDataset
 from metrics import kendall_tau
 from model import PercentileRegressor
 
@@ -112,14 +112,14 @@ if __name__ == "__main__":
     ).str.split()
 
     if args.train_mode == "pointwise":
-        train_ds = MarkdownDataset(
+        train_ds = PointwiseDataset(
             df_train_md,
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
             total_max_len=args.total_max_len,
             fts=train_fts,
         )
-        valid_ds = MarkdownDataset(
+        valid_ds = PointwiseDataset(
             df_valid_md,
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
