@@ -21,6 +21,8 @@ from model import PercentileRegressor
 
 parser = argparse.ArgumentParser(description="Process some arguments")
 parser.add_argument("--model_name_or_path", type=str, default="microsoft/codebert-base")
+parser.add_argument("--data_dir", type=str, default="./data/")
+parser.add_argument("--train_orders_path", type=str, default="./data/train_orders.csv")
 parser.add_argument("--train_md_path", type=str, default="./data/train_md.csv")
 parser.add_argument("--train_features_path", type=str, default="./data/train_ctx.json")
 parser.add_argument("--valid_md_path", type=str, default="./data/valid_md.csv")
@@ -86,7 +88,7 @@ if __name__ == "__main__":
 
     output_dir = f"outputs_{args.train_mode}_{args.memo}_{args.seed}"
     os.makedirs(f"./{output_dir}", exist_ok=True)
-    data_dir = Path("./data/")
+    data_dir = Path(args.data_dir)
 
     seed_everything(args.seed)
 
@@ -108,7 +110,7 @@ if __name__ == "__main__":
     valid_ctx = json.load(open(args.valid_features_path))
     valid_df = pd.read_csv(args.valid_path)
 
-    order_df = pd.read_csv("./data/train_orders.csv").set_index("id")
+    order_df = pd.read_csv(args.train_orders_path).set_index("id")
     df_orders = pd.read_csv(
         data_dir / "train_orders.csv",
         index_col="id",
