@@ -1,4 +1,5 @@
 import json
+import os
 from glob import glob
 
 import numpy as np
@@ -17,7 +18,10 @@ def read_notebook(path):
 
 
 if __name__ == "__main__":
-    train_paths = list(glob("./data/train/*.json"))
+    root = f"./data"
+    os.makedirs(root, exist_ok=True)
+
+    train_paths = list(glob(f"{root}/train/*.json"))
     train_notebooks = [
         read_notebook(path) for path in tqdm(train_paths, desc="Read Train Notebooks")
     ]
@@ -32,7 +36,7 @@ if __name__ == "__main__":
 
     #: 노트북 아이디별 cell_order(셀 순서)
     df_orders = pd.read_csv(
-        "./data/train_orders.csv", index_col="id", squeeze=True  # Series로 리턴 됨
+        f"{root}/train_orders.csv", index_col="id", squeeze=True  # Series로 리턴 됨
     ).str.split()  # string 표현을 리스트로 스플릿
 
     #: 노트북 아이디별 cell_order(셀 정답 순서), cell_id(주어진 셀 아이디 순서)
@@ -56,13 +60,13 @@ if __name__ == "__main__":
         .set_index("cell_id", append=True)
     )
 
-    df_ancestors = pd.read_csv("./data/train_ancestors.csv", index_col="id")
+    df_ancestors = pd.read_csv(f"{root}/train_ancestors.csv", index_col="id")
     df_all = (
         df_all.reset_index()
         .merge(df_ranks, on=["id", "cell_id"])
         .merge(df_ancestors, on=["id"])
     )
-    df_all = df_all.dropna(subset=["source", "rank"]) # TODO: 추가 문제 체크
+    df_all = df_all.dropna(subset=["source", "rank"])  # TODO: 추가 문제 체크
     df_all["pct_rank"] = df_all["rank"] / df_all.groupby("id")["cell_id"].transform(
         "count"
     )
@@ -72,15 +76,26 @@ if __name__ == "__main__":
 
     splitter = GroupShuffleSplit(n_splits=1, test_size=valid_split, random_state=42)
     train_ind, val_ind = next(splitter.split(df_all, groups=df_all["ancestor_id"]))
-    df_train = df_all.loc[train_ind].reset_index(drop=True)
-    df_valid = df_all.loc[val_ind].reset_index(drop=True)
-
-    df_train_md = df_train[df_train["cell_type"] == "markdown"].reset_index(drop=True)
-    df_valid_md = df_valid[df_valid["cell_type"] == "markdown"].reset_index(drop=True)
-    df_train_md.to_csv("./data/train_md.csv", index=False)
-    df_valid_md.to_csv("./data/valid_md.csv", index=False)
-    df_train.to_csv("./data/train.csv", index=False)
-    df_valid.to_csv("./data/valid.csv", index=False)
+    df_train = (
+        df_all.loc[train_ind].dropna(subset=["source", "rank"]).reset_index(drop=True)
+    )
+    df_valid = (
+        df_all.loc[val_ind].dropna(subset=["source", "rank"]).reset_index(drop=True)
+    )
+    df_train_md = (
+        df_train[df_train["cell_type"] == "markdown"]
+        .dropna(subset=["source", "rank"])
+        .reset_index(drop=True)
+    )
+    df_valid_md = (
+        df_valid[df_valid["cell_type"] == "markdown"]
+        .dropna(subset=["source", "rank"])
+        .reset_index(drop=True)
+    )
+    df_train_md.to_csv(f"{root}/train_md.csv", index=False)
+    df_valid_md.to_csv(f"{root}/valid_md.csv", index=False)
+    df_train.to_csv(f"{root}/train.csv", index=False)
+    df_valid.to_csv(f"{root}/valid.csv", index=False)
 
     def clean_code(cell):
         return str(cell).replace("\\n", "\n")
@@ -120,7 +135,7 @@ if __name__ == "__main__":
         return features
 
     train_feature_transformed_samples = get_features(df_train)
-    json.dump(train_feature_transformed_samples, open("./data/train_fts.json", "wt"))
+    json.dump(train_feature_transformed_samples, open(f"{root}/train_fts.json", "wt"))
 
     valid_feature_transformed_samples = get_features(df_valid)
-    json.dump(valid_feature_transformed_samples, open("./data/valid_fts.json", "wt"))
+    json.dump(valid_feature_transformed_samples, open(f"{root}/valid_fts.json", "wt"))
