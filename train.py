@@ -22,9 +22,9 @@ from model import PercentileRegressor
 parser = argparse.ArgumentParser(description="Process some arguments")
 parser.add_argument("--model_name_or_path", type=str, default="microsoft/codebert-base")
 parser.add_argument("--train_md_path", type=str, default="./data/train_md.csv")
-parser.add_argument("--train_features_path", type=str, default="./data/train_fts.json")
+parser.add_argument("--train_features_path", type=str, default="./data/train_ctx.json")
 parser.add_argument("--valid_md_path", type=str, default="./data/valid_md.csv")
-parser.add_argument("--valid_features_path", type=str, default="./data/valid_fts.json")
+parser.add_argument("--valid_features_path", type=str, default="./data/valid_ctx.json")
 parser.add_argument("--train_path", type=str, default="./data/train.csv")
 parser.add_argument("--valid_path", type=str, default="./data/valid.csv")
 
@@ -36,6 +36,7 @@ parser.add_argument("--epochs", type=int, default=3)
 parser.add_argument("--n_workers", type=int, default=8)
 parser.add_argument("--seed", type=int, default=42)
 parser.add_argument("--train_mode", type=str, default="pointwise")
+parser.add_argument("--memo", type=str, default="")
 
 
 def seed_everything(seed=42):
@@ -83,7 +84,7 @@ if __name__ == "__main__":
         args.total_max_len = 128
         args.md_max_len = 64
 
-    output_dir = f"outputs_{args.train_mode}_{args.seed}"
+    output_dir = f"outputs_{args.train_mode}_{args.memo}_{args.seed}"
     os.makedirs(f"./{output_dir}", exist_ok=True)
     data_dir = Path("./data/")
 
@@ -95,7 +96,7 @@ if __name__ == "__main__":
         .dropna()
         .reset_index(drop=True)
     )
-    train_fts = json.load(open(args.train_features_path))
+    train_ctx = json.load(open(args.train_features_path))
     train_df = pd.read_csv(args.train_path)
 
     df_valid_md = (
@@ -104,7 +105,7 @@ if __name__ == "__main__":
         .dropna()
         .reset_index(drop=True)
     )
-    valid_fts = json.load(open(args.valid_features_path))
+    valid_ctx = json.load(open(args.valid_features_path))
     valid_df = pd.read_csv(args.valid_path)
 
     order_df = pd.read_csv("./data/train_orders.csv").set_index("id")
@@ -120,14 +121,14 @@ if __name__ == "__main__":
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
             total_max_len=args.total_max_len,
-            fts=train_fts,
+            ctx=train_ctx,
         )
         valid_ds = PointwiseDataset(
             df_valid_md,
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
             total_max_len=args.total_max_len,
-            fts=valid_fts,
+            ctx=valid_ctx,
         )
     else:
         train_samples = generate_pairs_with_label(train_df, mode="train")

@@ -4,13 +4,13 @@ from transformers import AutoTokenizer
 
 
 class PointwiseDataset(Dataset):
-    def __init__(self, df, model_name_or_path, total_max_len, md_max_len, fts):
+    def __init__(self, df, model_name_or_path, total_max_len, md_max_len, ctx):
         super().__init__()
         self.df = df.reset_index(drop=True)
         self.md_max_len = md_max_len
         self.total_max_len = total_max_len
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        self.fts = fts
+        self.ctx = ctx
 
     def __getitem__(self, index):
         row = self.df.iloc[index]
@@ -25,17 +25,20 @@ class PointwiseDataset(Dataset):
             truncation=True,
         )
         code_inputs = self.tokenizer.batch_encode_plus(
-            [str(x) for x in self.fts[row.id]["codes"]],
+            [str(x) for x in self.ctx[row.id]["codes"]],
             add_special_tokens=True,
-            max_length=22,  # (512-64)//20
+            max_length=22,  # (512-64)//20, (512-64)//30
             padding="max_length",
             truncation=True,
         )
 
+        cls_token = 0 # <s>
+        sep_token = 2 # </s>
+
         ids = inputs["input_ids"]
         for x in code_inputs["input_ids"]:
-            ids.extend(x[:-1])  # TODO: </s>를 제거하려고 넣은 건데, 앞에 <s>는 안 없애나?
-        ids = ids[: self.total_max_len]
+            ids.extend(x[:-1]) # 중간 중간 </s> 없애기
+        ids = ids[: self.total_max_len - 1] + [sep_token]
         if len(ids) != self.total_max_len:
             ids = ids + [self.tokenizer.pad_token_id] * (self.total_max_len - len(ids))
         ids = torch.LongTensor(ids)
@@ -98,8 +101,8 @@ class PairwiseDataset(Dataset):
             truncation=True,
         )
 
-        cls_token = 0
-        sep_token = 2
+        cls_token = 0 # <s>
+        sep_token = 2 # </s>
         ids = (
             [cls_token]
             + md_inputs["input_ids"]
