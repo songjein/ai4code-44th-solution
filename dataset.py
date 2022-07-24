@@ -66,7 +66,6 @@ class PairwiseDataset(Dataset):
         model_name_or_path,
         total_max_len=128,
         md_max_len=64,
-        mode="train",
     ):
         super().__init__()
         self.samples = samples
@@ -75,7 +74,6 @@ class PairwiseDataset(Dataset):
         self.md_max_len = md_max_len
         self.code_max_len = total_max_len - md_max_len
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        self.mode = mode
 
     def __getitem__(self, index):
         md_cell_id, code_cell_id, label = self.samples[index]

@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from dataset import MarkdownDataset
+from dataset import MarkdownDataset, PairwiseDataset
 from metrics import kendall_tau
 from model import PercentileRegressor
 
@@ -24,6 +24,7 @@ parser.add_argument("--train_md_path", type=str, default="./data/train_md.csv")
 parser.add_argument("--train_features_path", type=str, default="./data/train_fts.json")
 parser.add_argument("--valid_md_path", type=str, default="./data/valid_md.csv")
 parser.add_argument("--valid_features_path", type=str, default="./data/valid_fts.json")
+parser.add_argument("--train_path", type=str, default="./data/train.csv")
 parser.add_argument("--valid_path", type=str, default="./data/valid.csv")
 
 parser.add_argument("--md_max_len", type=int, default=64)
@@ -33,6 +34,7 @@ parser.add_argument("--accumulation_steps", type=int, default=4)
 parser.add_argument("--epochs", type=int, default=3)
 parser.add_argument("--n_workers", type=int, default=8)
 parser.add_argument("--seed", type=int, default=42)
+parser.add_argument("--train_mode", type=str, default="pointwise")
 
 
 def seed_everything(seed=42):
@@ -47,7 +49,13 @@ def seed_everything(seed=42):
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    output_dir = f"outputs_{args.seed}"
+    assert args.train_mode in ["pointwise", "pairwise"]
+
+    if args.train_mode == "pairwise":
+        args.total_max_len = 128
+        args.md_max_len = 64
+
+    output_dir = f"outputs_{args.train_mode}_{args.seed}"
     os.makedirs(f"./{output_dir}", exist_ok=True)
     data_dir = Path("./data/")
 
@@ -60,6 +68,8 @@ if __name__ == "__main__":
         .reset_index(drop=True)
     )
     train_fts = json.load(open(args.train_features_path))
+    train_df = pd.read_csv(args.train_path)
+
     df_valid_md = (
         pd.read_csv(args.valid_md_path)
         .drop("parent_id", axis=1)
@@ -76,20 +86,39 @@ if __name__ == "__main__":
         squeeze=True,
     ).str.split()
 
-    train_ds = MarkdownDataset(
-        df_train_md,
-        model_name_or_path=args.model_name_or_path,
-        md_max_len=args.md_max_len,
-        total_max_len=args.total_max_len,
-        fts=train_fts,
-    )
-    valid_ds = MarkdownDataset(
-        df_valid_md,
-        model_name_or_path=args.model_name_or_path,
-        md_max_len=args.md_max_len,
-        total_max_len=args.total_max_len,
-        fts=valid_fts,
-    )
+    if args.train_mode == "pointwise":
+        train_ds = MarkdownDataset(
+            df_train_md,
+            model_name_or_path=args.model_name_or_path,
+            md_max_len=args.md_max_len,
+            total_max_len=args.total_max_len,
+            fts=train_fts,
+        )
+        valid_ds = MarkdownDataset(
+            df_valid_md,
+            model_name_or_path=args.model_name_or_path,
+            md_max_len=args.md_max_len,
+            total_max_len=args.total_max_len,
+            fts=valid_fts,
+        )
+    else:
+        train_samples = generate_pairs_with_label(train_df, mode="train")
+        train_ds = PairwiseDataset(
+            train_samples,
+            train_df,
+            args.model_name_or_path,
+            total_max_len=args.total_max_len,
+            md_max_len=args.md_max_len,
+        )
+        valid_samples = generate_pairs_with_label(valid_df, mode="test")
+        valid_ds = PairwiseDataset(
+            valid_samples,
+            valid_df,
+            args.model_name_or_path,
+            total_max_len=args.total_max_len,
+            md_max_len=args.md_max_len,
+        )
+
     train_loader = DataLoader(
         train_ds,
         batch_size=args.batch_size,
@@ -158,7 +187,11 @@ if __name__ == "__main__":
             num_training_steps=num_train_optimization_steps,
         )
 
-        criterion = torch.nn.L1Loss()
+        if args.train_mode == "pointwise":
+            criterion = torch.nn.L1Loss()
+        else:
+            criterion = torch.nn.BCEWithLogitsLoss()
+
         scaler = torch.cuda.amp.GradScaler()
 
         for e in range(epochs):
@@ -194,14 +227,19 @@ if __name__ == "__main__":
                     f"Epoch {e + 1} Loss: {avg_loss} lr: {scheduler.get_last_lr()}"
                 )
 
-            y_val, y_pred = validate(model, valid_loader)
-            valid_df["pred"] = valid_df.groupby(["id", "cell_type"])["rank"].rank(
-                pct=True
-            )
-
-            valid_df.loc[valid_df["cell_type"] == "markdown", "pred"] = y_pred
-            y_dummy = valid_df.sort_values("pred").groupby("id")["cell_id"].apply(list)
-            print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
+            if args.train_mode == "pointwise":
+                y_val, y_pred = validate(model, valid_loader)
+                valid_df["pred"] = valid_df.groupby(["id", "cell_type"])["rank"].rank(
+                    pct=True
+                )
+                valid_df.loc[valid_df["cell_type"] == "markdown", "pred"] = y_pred
+                y_dummy = (
+                    valid_df.sort_values("pred").groupby("id")["cell_id"].apply(list)
+                )
+                print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
+            else:
+                print("pass validation with pairwise")
+                pass
             torch.save(model.state_dict(), f"./{output_dir}/model_{e}.bin")
 
         return model, y_pred
