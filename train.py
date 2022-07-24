@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.metrics import precision_recall_fscore_support
 from torch.nn.utils import clip_grad_norm_
 from torch.optim.adamw import AdamW
 from torch.utils.data import DataLoader
@@ -47,7 +48,7 @@ def seed_everything(seed=42):
 
 
 def generate_pairs_with_label(
-    df, mode="train", negative_ratio=0.15, max_num_negative=2048
+    df, mode="train", negative_ratio=0.15, max_num_negative=8192
 ):
     samples = []
     select_or_not = np.random.random(size=max_num_negative) < negative_ratio
@@ -262,8 +263,17 @@ if __name__ == "__main__":
                 )
                 print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
             else:
-                print("pass validation with pairwise")
-                pass
+                def sigmoid(z):
+                    return 1/(1 + np.exp(-z))
+                y_val, y_pred = validate(model, valid_loader)
+                y_pred = sigmoid(y_pred) > 0.5
+                precision, recall, f1, _ = precision_recall_fscore_support(
+                    y_val, y_pred, average="binary", zero_division=0
+                )
+                print(f"precision: {precision}")
+                print(f"recall: {recall}")
+                print(f"f1: {f1}")
+
             torch.save(model.state_dict(), f"./{output_dir}/model_{e}.bin")
 
         return model, y_pred
