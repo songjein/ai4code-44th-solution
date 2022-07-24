@@ -32,30 +32,27 @@ class PointwiseDataset(Dataset):
             truncation=True,
         )
 
-        cls_token = 0 # <s>
-        sep_token = 2 # </s>
+        cls_token_id = self.tokenizer.cls_token_id
+        sep_token_id = self.tokenizer.sep_token_id
+        pad_token_id = self.tokenizer.pad_token_id
 
         ids = inputs["input_ids"]
         for x in code_inputs["input_ids"]:
             ids.extend(x[:-1]) # 중간 중간 </s> 없애기
-        ids = ids[: self.total_max_len - 1] + [sep_token]
+        ids = ids[: self.total_max_len - 1] + [sep_token_id]
+        mask = [1] * len(ids)
         if len(ids) != self.total_max_len:
-            ids = ids + [self.tokenizer.pad_token_id] * (self.total_max_len - len(ids))
-        ids = torch.LongTensor(ids)
-
-        mask = inputs["attention_mask"]
-        for x in code_inputs["attention_mask"]:
-            mask.extend(x[:-1])
-        mask = mask[: self.total_max_len]
-        if len(mask) != self.total_max_len:
-            mask = mask + [self.tokenizer.pad_token_id] * (
+            ids = ids + [pad_token_id] * (self.total_max_len - len(ids))
+            mask = mask + [pad_token_id] * (
                 self.total_max_len - len(mask)
             )
-        mask = torch.LongTensor(mask)
-
         assert len(ids) == self.total_max_len
 
-        return ids, mask, torch.FloatTensor([row.pct_rank])
+        ids = torch.LongTensor(ids)
+        mask = torch.LongTensor(mask)
+        label = torch.FloatTensor([row.pct_rank])
+
+        return ids, mask, label
 
     def __len__(self):
         return self.df.shape[0]
@@ -101,17 +98,24 @@ class PairwiseDataset(Dataset):
             truncation=True,
         )
 
-        cls_token = 0 # <s>
-        sep_token = 2 # </s>
+        cls_token_id = self.tokenizer.cls_token_id
+        sep_token_id = self.tokenizer.sep_token_id
+        pad_token_id = self.tokenizer.pad_token_id
+
         ids = (
-            [cls_token]
+            [cls_token_id]
             + md_inputs["input_ids"]
-            + [sep_token, sep_token]
+            + [sep_token_id, sep_token_id]
             + code_inputs["input_ids"]
-            + [sep_token]
+            + [sep_token_id]
         )
         ids = ids[: self.total_max_len]
         mask = [1] * len(ids)
+        if len(ids) != self.total_max_len:
+            ids = ids + [pad_token_id] * (self.total_max_len - len(ids))
+            mask = mask + [pad_token_id] * (
+                self.total_max_len - len(mask)
+            )
         assert len(ids) == self.total_max_len
 
         ids = torch.LongTensor(ids)
