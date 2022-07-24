@@ -34,7 +34,7 @@ class MarkdownDataset(Dataset):
 
         ids = inputs["input_ids"]
         for x in code_inputs["input_ids"]:
-            ids.extend(x[:-1])
+            ids.extend(x[:-1])  # TODO: </s>를 제거하려고 넣은 건데, 앞에 <s>는 안 없애나?
         ids = ids[: self.total_max_len]
         if len(ids) != self.total_max_len:
             ids = ids + [self.tokenizer.pad_token_id] * (self.total_max_len - len(ids))
@@ -56,3 +56,80 @@ class MarkdownDataset(Dataset):
 
     def __len__(self):
         return self.df.shape[0]
+
+
+class PairwiseDataset(Dataset):
+    def __init__(
+        self,
+        samples,
+        df,
+        model_name_or_path,
+        total_max_len=128,
+        md_max_len=64,
+        mode="train",
+    ):
+        super().__init__()
+        self.samples = samples
+        self.id2src = dict(zip(df["cell_id"].values, df["source"].values))
+        self.total_max_len = total_max_len
+        self.md_max_len = md_max_len
+        self.code_max_len = total_max_len - md_max_len
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        self.mode = mode
+
+    def __getitem__(self, index):
+        md_cell_id, code_cell_id, label = self.samples[index]
+
+        md_inputs = self.tokenizer.encode_plus(
+            self.id2src[md_cell_id],
+            None,
+            add_special_tokens=False,
+            max_length=self.md_max_len - 2,  # special token
+            padding="max_length",
+            return_token_type_ids=True,
+            truncation=True,
+        )
+
+        code_inputs = self.tokenizer.encode_plus(
+            self.id2src[code_cell_id],
+            None,
+            add_special_tokens=False,
+            max_length=self.code_max_len - 2,  # special token
+            padding="max_length",
+            return_token_type_ids=True,
+            truncation=True,
+        )
+
+        cls_token = 0
+        sep_token = 2
+        ids = (
+            [cls_token]
+            + md_inputs["input_ids"]
+            + [sep_token, sep_token]
+            + code_inputs["input_ids"]
+            + [sep_token]
+        )
+        ids = ids[: self.total_max_len]
+        mask = [1] * len(ids)
+        assert len(ids) == self.total_max_len
+
+        ids = torch.LongTensor(ids)
+        mask = torch.LongTensor(mask)
+        label = torch.FloatTensor([label])
+        return ids, mask, label
+
+    def __len__(self):
+        return len(self.samples)
+
+
+if __name__ == "__main__":
+
+    import pandas as pd
+
+    from preprocess import generate_pairs_with_label
+
+    df = pd.read_csv("./data/valid.csv")
+    samples = generate_pairs_with_label(df)
+    dataset = PairwiseDataset(samples, df, "microsoft/codebert-base")
+
+    print(dataset[0])
