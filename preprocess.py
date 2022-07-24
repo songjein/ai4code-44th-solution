@@ -62,6 +62,7 @@ if __name__ == "__main__":
         .merge(df_ranks, on=["id", "cell_id"])
         .merge(df_ancestors, on=["id"])
     )
+    df_all = df_all.dropna(subset=["source", "rank"]) # TODO: 추가 문제 체크
     df_all["pct_rank"] = df_all["rank"] / df_all.groupby("id")["cell_id"].transform(
         "count"
     )
