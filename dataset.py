@@ -4,10 +4,11 @@ from transformers import AutoTokenizer
 
 
 class PointwiseDataset(Dataset):
-    def __init__(self, df, model_name_or_path, total_max_len, md_max_len, ctx):
+    def __init__(self, df, model_name_or_path, total_max_len, md_max_len, code_max_len, ctx):
         super().__init__()
         self.df = df.reset_index(drop=True)
         self.md_max_len = md_max_len
+        self.code_max_len = code_max_len
         self.total_max_len = total_max_len
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         self.ctx = ctx
@@ -27,7 +28,7 @@ class PointwiseDataset(Dataset):
         code_inputs = self.tokenizer.batch_encode_plus(
             [str(x) for x in self.ctx[row.id]["codes"]],
             add_special_tokens=True,
-            max_length=22,  # (512-64)//20, (512-64)//30
+            max_length=self.code_max_len,  # (512-64)//20, (512-64)//30
             padding="max_length",
             truncation=True,
         )

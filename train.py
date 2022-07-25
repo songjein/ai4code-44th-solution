@@ -24,13 +24,14 @@ parser.add_argument("--model_name_or_path", type=str, default="microsoft/codeber
 parser.add_argument("--data_dir", type=str, default="./data/")
 parser.add_argument("--train_orders_path", type=str, default="./data/train_orders.csv")
 parser.add_argument("--train_md_path", type=str, default="./data/train_md.csv")
-parser.add_argument("--train_features_path", type=str, default="./data/train_ctx.json")
+parser.add_argument("--train_context_path", type=str, default="./data/train_ctx.json")
 parser.add_argument("--valid_md_path", type=str, default="./data/valid_md.csv")
-parser.add_argument("--valid_features_path", type=str, default="./data/valid_ctx.json")
+parser.add_argument("--valid_context_path", type=str, default="./data/valid_ctx.json")
 parser.add_argument("--train_path", type=str, default="./data/train.csv")
 parser.add_argument("--valid_path", type=str, default="./data/valid.csv")
 
 parser.add_argument("--md_max_len", type=int, default=64)
+parser.add_argument("--code_max_len", type=int, default=22)
 parser.add_argument("--total_max_len", type=int, default=512)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--accumulation_steps", type=int, default=4)
@@ -98,7 +99,7 @@ if __name__ == "__main__":
         .dropna()
         .reset_index(drop=True)
     )
-    train_ctx = json.load(open(args.train_features_path))
+    train_ctx = json.load(open(args.train_context_path))
     train_df = pd.read_csv(args.train_path)
 
     df_valid_md = (
@@ -107,7 +108,7 @@ if __name__ == "__main__":
         .dropna()
         .reset_index(drop=True)
     )
-    valid_ctx = json.load(open(args.valid_features_path))
+    valid_ctx = json.load(open(args.valid_context_path))
     valid_df = pd.read_csv(args.valid_path)
 
     order_df = pd.read_csv(args.train_orders_path).set_index("id")
@@ -122,14 +123,16 @@ if __name__ == "__main__":
             df_train_md,
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
+            code_max_len=args.code_max_len,
             total_max_len=args.total_max_len,
             ctx=train_ctx,
         )
         valid_ds = PointwiseDataset(
             df_valid_md,
             model_name_or_path=args.model_name_or_path,
-            md_max_len=args.md_max_len,
             total_max_len=args.total_max_len,
+            md_max_len=args.md_max_len,
+            code_max_len=args.code_max_len,
             ctx=valid_ctx,
         )
     else:
