@@ -4,7 +4,9 @@ from transformers import AutoTokenizer
 
 
 class PointwiseDataset(Dataset):
-    def __init__(self, df, model_name_or_path, total_max_len, md_max_len, code_max_len, ctx):
+    def __init__(
+        self, df, model_name_or_path, total_max_len, md_max_len, code_max_len, ctx
+    ):
         super().__init__()
         self.df = df.reset_index(drop=True)
         self.md_max_len = md_max_len
@@ -33,20 +35,17 @@ class PointwiseDataset(Dataset):
             truncation=True,
         )
 
-        cls_token_id = self.tokenizer.cls_token_id
         sep_token_id = self.tokenizer.sep_token_id
         pad_token_id = self.tokenizer.pad_token_id
 
         ids = inputs["input_ids"]
         for x in code_inputs["input_ids"]:
-            ids.extend(x[:-1]) # 중간 중간 </s> 없애기
+            ids.extend(x[:-1])  # 중간 중간 </s> 없애기
         ids = ids[: self.total_max_len - 1] + [sep_token_id]
         mask = [1] * len(ids)
         if len(ids) != self.total_max_len:
             ids = ids + [pad_token_id] * (self.total_max_len - len(ids))
-            mask = mask + [pad_token_id] * (
-                self.total_max_len - len(mask)
-            )
+            mask = mask + [pad_token_id] * (self.total_max_len - len(mask))
         assert len(ids) == self.total_max_len
 
         ids = torch.LongTensor(ids)
@@ -84,7 +83,6 @@ class PairwiseDataset(Dataset):
             None,
             add_special_tokens=False,
             max_length=self.md_max_len - 2,  # special token
-            padding="max_length",
             return_token_type_ids=True,
             truncation=True,
         )
@@ -94,7 +92,6 @@ class PairwiseDataset(Dataset):
             None,
             add_special_tokens=False,
             max_length=self.code_max_len - 2,  # special token
-            padding="max_length",
             return_token_type_ids=True,
             truncation=True,
         )
@@ -114,9 +111,7 @@ class PairwiseDataset(Dataset):
         mask = [1] * len(ids)
         if len(ids) != self.total_max_len:
             ids = ids + [pad_token_id] * (self.total_max_len - len(ids))
-            mask = mask + [pad_token_id] * (
-                self.total_max_len - len(mask)
-            )
+            mask = mask + [pad_token_id] * (self.total_max_len - len(mask))
         assert len(ids) == self.total_max_len
 
         ids = torch.LongTensor(ids)
@@ -132,7 +127,7 @@ if __name__ == "__main__":
 
     import pandas as pd
 
-    from preprocess import generate_pairs_with_label
+    from train import generate_pairs_with_label
 
     df = pd.read_csv("./data/valid.csv")
     samples = generate_pairs_with_label(df)
