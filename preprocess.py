@@ -49,7 +49,7 @@ def sample_cells(cells, n):
         return results
 
 
-def get_features(df):
+def get_features(df, num_sampled_code_cell=30):
     """
     .. note::
         더 똑똑하게 추출하기
@@ -61,7 +61,7 @@ def get_features(df):
         total_md = sub_df[sub_df.cell_type == "markdown"].shape[0]
         code_sub_df = sub_df[sub_df.cell_type == "code"]
         total_code = code_sub_df.shape[0]
-        codes = sample_cells(code_sub_df.source.values, 20)  # 코드셀만 모은 후 거기서 샘플 뽑음
+        codes = sample_cells(code_sub_df.source.values, num_sampled_code_cell)
         features[idx]["total_code"] = total_code
         features[idx]["total_md"] = total_md
         features[idx]["codes"] = codes
@@ -69,6 +69,10 @@ def get_features(df):
 
 
 if __name__ == "__main__":
+    """
+    .. note::
+        dropna를 끝나고 한 번 더 해줘야하는 문제가 있음
+    """
 
     random.seed(42)
 
@@ -148,7 +152,7 @@ if __name__ == "__main__":
     df_valid.to_csv(f"{root}/valid.csv", index=False)
 
     train_feature_transformed_samples = get_features(df_train)
-    json.dump(train_feature_transformed_samples, open(f"{root}/train_fts.json", "wt"))
+    json.dump(train_feature_transformed_samples, open(f"{root}/train_ctx.json", "wt"))
 
     valid_feature_transformed_samples = get_features(df_valid)
-    json.dump(valid_feature_transformed_samples, open(f"{root}/valid_fts.json", "wt"))
+    json.dump(valid_feature_transformed_samples, open(f"{root}/valid_ctx.json", "wt"))
