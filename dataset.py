@@ -17,13 +17,11 @@ class PointwiseDataset(Dataset):
 
     def __getitem__(self, index):
         row = self.df.iloc[index]
-
         inputs = self.tokenizer.encode_plus(
             row.source,
             None,
             add_special_tokens=True,
             max_length=self.md_max_len,
-            padding="max_length",
             return_token_type_ids=True,
             truncation=True,
         )
@@ -31,7 +29,6 @@ class PointwiseDataset(Dataset):
             [str(x) for x in self.ctx[row.id]["codes"]],
             add_special_tokens=True,
             max_length=self.code_max_len,  # (512-64)//20, (512-64)//30
-            padding="max_length",
             truncation=True,
         )
 
@@ -124,13 +121,31 @@ class PairwiseDataset(Dataset):
 
 
 if __name__ == "__main__":
-
+    import json
     import pandas as pd
 
     from train import generate_pairs_with_label
 
-    df = pd.read_csv("./data/valid.csv")
-    samples = generate_pairs_with_label(df)
-    dataset = PairwiseDataset(samples, df, "microsoft/codebert-base")
+    if False:
+        df = pd.read_csv("./data/valid.csv")
+        samples = generate_pairs_with_label(df)
+        dataset = PairwiseDataset(samples, df, "microsoft/codebert-base")
+
+    if True:
+        df_valid_md = (
+            pd.read_csv("./data/valid_md.csv")
+            .drop("parent_id", axis=1)
+            .dropna()
+            .reset_index(drop=True)
+        )
+        valid_ctx = json.load(open("./data/valid_ctx.json"))
+        dataset = PointwiseDataset(
+            df_valid_md,
+            model_name_or_path="microsoft/codebert-base",
+            md_max_len=64,
+            code_max_len=15,
+            total_max_len=512,
+            ctx=valid_ctx,
+        )
 
     print(dataset[0])
