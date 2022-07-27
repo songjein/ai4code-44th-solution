@@ -4,13 +4,10 @@ from transformers import AutoTokenizer
 
 
 class PointwiseDataset(Dataset):
-    def __init__(
-        self, df, model_name_or_path, total_max_len, md_max_len, code_max_len, ctx
-    ):
+    def __init__(self, df, model_name_or_path, total_max_len, md_max_len, ctx):
         super().__init__()
         self.df = df.reset_index(drop=True)
         self.md_max_len = md_max_len
-        self.code_max_len = code_max_len
         self.total_max_len = total_max_len
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         self.ctx = ctx

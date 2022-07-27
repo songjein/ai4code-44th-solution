@@ -30,8 +30,10 @@ parser.add_argument("--valid_context_path", type=str, default="./data/valid_ctx.
 parser.add_argument("--train_path", type=str, default="./data/train.csv")
 parser.add_argument("--valid_path", type=str, default="./data/valid.csv")
 
-parser.add_argument("--md_max_len", type=int, default=64)
-parser.add_argument("--code_max_len", type=int, default=22)
+parser.add_argument("--md_max_len", type=int, default=48)
+parser.add_argument(
+    "--code_max_len", type=int, default=22, help="pairwise에서만 사용, pointwise에선 동적 계산"
+)
 parser.add_argument("--total_max_len", type=int, default=512)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--accumulation_steps", type=int, default=4)
@@ -76,7 +78,6 @@ def generate_pairs_with_label(df, mode="train", pos_neg_times=10):
         random.shuffle(_samples)
         samples += _samples
     return samples
-
 
 
 if __name__ == "__main__":
@@ -124,7 +125,6 @@ if __name__ == "__main__":
             df_train_md,
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
-            code_max_len=args.code_max_len,
             total_max_len=args.total_max_len,
             ctx=train_ctx,
         )
@@ -133,7 +133,6 @@ if __name__ == "__main__":
             model_name_or_path=args.model_name_or_path,
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
-            code_max_len=args.code_max_len,
             ctx=valid_ctx,
         )
     else:
