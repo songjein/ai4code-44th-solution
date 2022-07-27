@@ -23,6 +23,10 @@ def get_ranks(gt, derived):
 
 
 def clean_code(cell):
+    """
+    .. note::
+        추가 전처리?
+    """
     return str(cell).replace("\\n", "\n")
 
 
@@ -35,7 +39,7 @@ def sample_cells(cells, n):
     """
     cells = [clean_code(cell) for cell in cells]
     if n >= len(cells):
-        return [cell[:200] for cell in cells]
+        return cells
     else:
         results = []
         step = len(cells) / n
@@ -77,6 +81,8 @@ if __name__ == "__main__":
     random.seed(42)
 
     root = f"./data"
+    num_sampled_code_cell = 30
+
     os.makedirs(root, exist_ok=True)
 
     train_paths = list(glob(f"{root}/train/*.json"))
@@ -151,8 +157,33 @@ if __name__ == "__main__":
     df_train.to_csv(f"{root}/train.csv", index=False)
     df_valid.to_csv(f"{root}/valid.csv", index=False)
 
-    train_feature_transformed_samples = get_features(df_train)
-    json.dump(train_feature_transformed_samples, open(f"{root}/train_ctx.json", "wt"))
+    # 이상한 버그? nan 데이터가 여전히 포함되어 있어 다시 읽은 뒤 없애고 저장
+    # 앞서 분명히 source/rank에 대한 nan row를 없앴는데도 매번 남아 있는 문제
+    pd.read_csv(f"{root}/train_md.csv").dropna(subset=["source", "rank"]).to_csv(
+        f"{root}/train_md.csv", index=False
+    )
+    pd.read_csv(f"{root}/valid_md.csv").dropna(subset=["source", "rank"]).to_csv(
+        f"{root}/valid_md.csv", index=False
+    )
+    df_train = pd.read_csv(f"{root}/train.csv")
+    df_train = df_train[df_train["cell_type"] == "markdown"].dropna(
+        subset=["source", "rank"]
+    )
+    df_train.to_csv(f"{root}/train.csv", index=False)
+    df_valid = pd.read_csv(f"{root}/valid.csv")
+    df_valid = df_valid[df_valid["cell_type"] == "markdown"].dropna(
+        subset=["source", "rank"]
+    )
+    df_valid.to_csv(f"{root}/valid.csv", index=False)
 
-    valid_feature_transformed_samples = get_features(df_valid)
-    json.dump(valid_feature_transformed_samples, open(f"{root}/valid_ctx.json", "wt"))
+    train_feature_transformed_samples = get_features(df_train, num_sampled_code_cell)
+    json.dump(
+        train_feature_transformed_samples,
+        open(f"{root}/train_ctx_{num_sampled_code_cell}.json", "wt"),
+    )
+
+    valid_feature_transformed_samples = get_features(df_valid, num_sampled_code_cell)
+    json.dump(
+        valid_feature_transformed_samples,
+        open(f"{root}/valid_ctx_{num_sampled_code_cell}.json", "wt"),
+    )
