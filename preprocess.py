@@ -2,11 +2,17 @@ import json
 import os
 import random
 from glob import glob
+import argparse
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from tqdm import tqdm
+
+
+parser = argparse.ArgumentParser(description="전처리 관련 파라미터")
+parser.add_argument("--root_path", type=str, default="./data")
+parser.add_argument("--num_sampled_code_cell", type=int, default=30)
 
 
 def read_notebook(path):
@@ -79,13 +85,11 @@ if __name__ == "__main__":
     """
 
     random.seed(42)
+    args = parser.parse_args()
 
-    root = f"./data"
-    num_sampled_code_cell = 30
+    os.makedirs(args.root_path, exist_ok=True)
 
-    os.makedirs(root, exist_ok=True)
-
-    train_paths = list(glob(f"{root}/train/*.json"))
+    train_paths = list(glob(f"{args.root_path}/train/*.json"))
     train_notebooks = [
         read_notebook(path) for path in tqdm(train_paths, desc="Read Train Notebooks")
     ]
@@ -100,7 +104,7 @@ if __name__ == "__main__":
 
     #: 노트북 아이디별 cell_order(셀 순서)
     df_orders = pd.read_csv(
-        f"{root}/train_orders.csv", index_col="id", squeeze=True  # Series로 리턴 됨
+        f"{args.root_path}/train_orders.csv", index_col="id", squeeze=True  # Series로 리턴 됨
     ).str.split()  # string 표현을 리스트로 스플릿
 
     #: 노트북 아이디별 cell_order(셀 정답 순서), cell_id(주어진 셀 아이디 순서)
@@ -121,7 +125,7 @@ if __name__ == "__main__":
         .set_index("cell_id", append=True)
     )
 
-    df_ancestors = pd.read_csv(f"{root}/train_ancestors.csv", index_col="id")
+    df_ancestors = pd.read_csv(f"{args.root_path}/train_ancestors.csv", index_col="id")
     df_all = (
         df_all.reset_index()
         .merge(df_ranks, on=["id", "cell_id"])
@@ -152,38 +156,32 @@ if __name__ == "__main__":
         .dropna(subset=["source", "rank"])
         .reset_index(drop=True)
     )
-    df_train_md.to_csv(f"{root}/train_md.csv", index=False)
-    df_valid_md.to_csv(f"{root}/valid_md.csv", index=False)
-    df_train.to_csv(f"{root}/train.csv", index=False)
-    df_valid.to_csv(f"{root}/valid.csv", index=False)
+    df_train_md.to_csv(f"{args.root_path}/train_md.csv", index=False)
+    df_valid_md.to_csv(f"{args.root_path}/valid_md.csv", index=False)
+    df_train.to_csv(f"{args.root_path}/train.csv", index=False)
+    df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
 
     # 이상한 버그? nan 데이터가 여전히 포함되어 있어 다시 읽은 뒤 없애고 저장
     # 앞서 분명히 source/rank에 대한 nan row를 없앴는데도 매번 남아 있는 문제
-    pd.read_csv(f"{root}/train_md.csv").dropna(subset=["source", "rank"]).to_csv(
-        f"{root}/train_md.csv", index=False
+    pd.read_csv(f"{args.root_path}/train_md.csv").dropna(subset=["source", "rank"]).to_csv(
+        f"{args.root_path}/train_md.csv", index=False
     )
-    pd.read_csv(f"{root}/valid_md.csv").dropna(subset=["source", "rank"]).to_csv(
-        f"{root}/valid_md.csv", index=False
+    pd.read_csv(f"{args.root_path}/valid_md.csv").dropna(subset=["source", "rank"]).to_csv(
+        f"{args.root_path}/valid_md.csv", index=False
     )
-    df_train = pd.read_csv(f"{root}/train.csv")
-    df_train = df_train[df_train["cell_type"] == "markdown"].dropna(
-        subset=["source", "rank"]
-    )
-    df_train.to_csv(f"{root}/train.csv", index=False)
-    df_valid = pd.read_csv(f"{root}/valid.csv")
-    df_valid = df_valid[df_valid["cell_type"] == "markdown"].dropna(
-        subset=["source", "rank"]
-    )
-    df_valid.to_csv(f"{root}/valid.csv", index=False)
+    df_train = pd.read_csv(f"{args.root_path}/train.csv").dropna(subset=["source", "rank"])
+    df_train.to_csv(f"{args.root_path}/train.csv", index=False)
+    df_valid = pd.read_csv(f"{args.root_path}/valid.csv").dropna(subset=["source", "rank"])
+    df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
 
-    train_feature_transformed_samples = get_features(df_train, num_sampled_code_cell)
+    train_feature_transformed_samples = get_features(df_train, args.num_sampled_code_cell)
     json.dump(
         train_feature_transformed_samples,
-        open(f"{root}/train_ctx_{num_sampled_code_cell}.json", "wt"),
+        open(f"{args.root_path}/train_ctx_{args.num_sampled_code_cell}.json", "wt"),
     )
 
-    valid_feature_transformed_samples = get_features(df_valid, num_sampled_code_cell)
+    valid_feature_transformed_samples = get_features(df_valid, args.num_sampled_code_cell)
     json.dump(
         valid_feature_transformed_samples,
-        open(f"{root}/valid_ctx_{num_sampled_code_cell}.json", "wt"),
+        open(f"{args.root_path}/valid_ctx_{args.num_sampled_code_cell}.json", "wt"),
     )
