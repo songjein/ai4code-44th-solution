@@ -19,7 +19,7 @@ from dataset import PairwiseDataset, PointwiseDataset
 from metrics import kendall_tau
 from model import PercentileRegressor
 
-parser = argparse.ArgumentParser(description="Process some arguments")
+parser = argparse.ArgumentParser(description="학습 관련 파라미터")
 parser.add_argument("--model_name_or_path", type=str, default="microsoft/codebert-base")
 parser.add_argument("--data_dir", type=str, default="./data/")
 parser.add_argument("--train_orders_path", type=str, default="./data/train_orders.csv")
@@ -76,6 +76,7 @@ def generate_pairs_with_label(df, mode="train", pos_neg_times=10):
         random.shuffle(_samples)
         samples += _samples
     return samples
+
 
 
 if __name__ == "__main__":
