@@ -25,10 +25,15 @@ class PointwiseDataset(Dataset):
             return_token_type_ids=True,
             truncation=True,
         )
+
+        # 개별 코드 셀 토큰의 최대 길이를 동적으로 결정
+        num_codes = len(self.ctx[row.id]["codes"])
+        code_max_len_ = (self.total_max_len - self.md_max_len) // num_codes
+
         code_inputs = self.tokenizer.batch_encode_plus(
             [str(x) for x in self.ctx[row.id]["codes"]],
             add_special_tokens=True,
-            max_length=self.code_max_len,  # (512-64)//20, (512-64)//30
+            max_length=code_max_len_,
             truncation=True,
         )
 
@@ -83,7 +88,6 @@ class PairwiseDataset(Dataset):
             return_token_type_ids=True,
             truncation=True,
         )
-
         code_inputs = self.tokenizer.encode_plus(
             self.id2src[code_cell_id],
             None,
@@ -122,6 +126,7 @@ class PairwiseDataset(Dataset):
 
 if __name__ == "__main__":
     import json
+
     import pandas as pd
 
     from train import generate_pairs_with_label
@@ -138,7 +143,7 @@ if __name__ == "__main__":
             .dropna()
             .reset_index(drop=True)
         )
-        valid_ctx = json.load(open("./data/valid_ctx.json"))
+        valid_ctx = json.load(open("./data/valid_ctx_50.json"))
         dataset = PointwiseDataset(
             df_valid_md,
             model_name_or_path="microsoft/codebert-base",
@@ -148,4 +153,6 @@ if __name__ == "__main__":
             ctx=valid_ctx,
         )
 
-    print(dataset[0])
+    for idx, data in enumerate(dataset):
+        if idx > 100:
+            break
