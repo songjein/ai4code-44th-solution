@@ -12,6 +12,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser(description="전처리 관련 파라미터")
 parser.add_argument("--root_path", type=str, default="./data")
 parser.add_argument("--num_sampled_code_cell", type=int, default=30)
+parser.add_argument("--skip_create_from_scratch", action="store_true")
 
 
 def read_notebook(path):
@@ -86,81 +87,87 @@ if __name__ == "__main__":
     random.seed(42)
     args = parser.parse_args()
 
-    os.makedirs(args.root_path, exist_ok=True)
+    if not args.skip_create_from_scratch:
+        os.makedirs(args.root_path, exist_ok=True)
 
-    train_paths = list(glob(f"{args.root_path}/train/*.json"))
-    train_notebooks = [
-        read_notebook(path) for path in tqdm(train_paths, desc="Read Train Notebooks")
-    ]
+        train_paths = list(glob(f"{args.root_path}/train/*.json"))
+        train_notebooks = [
+            read_notebook(path)
+            for path in tqdm(train_paths, desc="Read Train Notebooks")
+        ]
 
-    #: 노트북 아이디, 셀 아이디, 셀 타입, 소스(텍스트)
-    df_all = (
-        pd.concat(train_notebooks)
-        .set_index("id", append=True)
-        .swaplevel()
-        .sort_index(level="id", sort_remaining=False)
-    )
+        #: 노트북 아이디, 셀 아이디, 셀 타입, 소스(텍스트)
+        df_all = (
+            pd.concat(train_notebooks)
+            .set_index("id", append=True)
+            .swaplevel()
+            .sort_index(level="id", sort_remaining=False)
+        )
 
-    #: 노트북 아이디별 cell_order(셀 순서)
-    df_orders = pd.read_csv(
-        f"{args.root_path}/train_orders.csv",
-        index_col="id",
-        squeeze=True,  # Series로 리턴 됨
-    ).str.split()  # string 표현을 리스트로 스플릿
+        #: 노트북 아이디별 cell_order(셀 순서)
+        df_orders = pd.read_csv(
+            f"{args.root_path}/train_orders.csv",
+            index_col="id",
+            squeeze=True,  # Series로 리턴 됨
+        ).str.split()  # string 표현을 리스트로 스플릿
 
-    #: 노트북 아이디별 cell_order(셀 정답 순서), cell_id(주어진 셀 아이디 순서)
-    merged_df_orders = df_orders.to_frame().join(
-        df_all.reset_index("cell_id").groupby("id")["cell_id"].apply(list),
-        how="right",
-    )
+        #: 노트북 아이디별 cell_order(셀 정답 순서), cell_id(주어진 셀 아이디 순서)
+        merged_df_orders = df_orders.to_frame().join(
+            df_all.reset_index("cell_id").groupby("id")["cell_id"].apply(list),
+            how="right",
+        )
 
-    ranks = {}
-    for id_, cell_order, cell_id in merged_df_orders.itertuples():
-        ranks[id_] = {"cell_id": cell_id, "rank": get_ranks(cell_order, cell_id)}
+        ranks = {}
+        for id_, cell_order, cell_id in merged_df_orders.itertuples():
+            ranks[id_] = {"cell_id": cell_id, "rank": get_ranks(cell_order, cell_id)}
 
-    #: 주어진 cell id에 원래 순서를 매핑한 df를 만듦
-    df_ranks = (
-        pd.DataFrame.from_dict(ranks, orient="index")
-        .rename_axis("id")
-        .apply(pd.Series.explode)
-        .set_index("cell_id", append=True)
-    )
+        #: 주어진 cell id에 원래 순서를 매핑한 df를 만듦
+        df_ranks = (
+            pd.DataFrame.from_dict(ranks, orient="index")
+            .rename_axis("id")
+            .apply(pd.Series.explode)
+            .set_index("cell_id", append=True)
+        )
 
-    df_ancestors = pd.read_csv(f"{args.root_path}/train_ancestors.csv", index_col="id")
-    df_all = (
-        df_all.reset_index()
-        .merge(df_ranks, on=["id", "cell_id"])
-        .merge(df_ancestors, on=["id"])
-    )
-    df_all = df_all.dropna(subset=["source", "rank"])  # TODO: 추가 문제 체크
-    df_all["pct_rank"] = df_all["rank"] / df_all.groupby("id")["cell_id"].transform(
-        "count"
-    )
+        df_ancestors = pd.read_csv(
+            f"{args.root_path}/train_ancestors.csv", index_col="id"
+        )
+        df_all = (
+            df_all.reset_index()
+            .merge(df_ranks, on=["id", "cell_id"])
+            .merge(df_ancestors, on=["id"])
+        )
+        df_all = df_all.dropna(subset=["source", "rank"])  # TODO: 추가 문제 체크
+        df_all["pct_rank"] = df_all["rank"] / df_all.groupby("id")["cell_id"].transform(
+            "count"
+        )
 
-    # validation split
-    valid_split = 0.1
-    splitter = GroupShuffleSplit(n_splits=1, test_size=valid_split, random_state=42)
-    train_ind, val_ind = next(splitter.split(df_all, groups=df_all["ancestor_id"]))
-    df_train = (
-        df_all.loc[train_ind].dropna(subset=["source", "rank"]).reset_index(drop=True)
-    )
-    df_valid = (
-        df_all.loc[val_ind].dropna(subset=["source", "rank"]).reset_index(drop=True)
-    )
-    df_train_md = (
-        df_train[df_train["cell_type"] == "markdown"]
-        .dropna(subset=["source", "rank"])
-        .reset_index(drop=True)
-    )
-    df_valid_md = (
-        df_valid[df_valid["cell_type"] == "markdown"]
-        .dropna(subset=["source", "rank"])
-        .reset_index(drop=True)
-    )
-    df_train_md.to_csv(f"{args.root_path}/train_md.csv", index=False)
-    df_valid_md.to_csv(f"{args.root_path}/valid_md.csv", index=False)
-    df_train.to_csv(f"{args.root_path}/train.csv", index=False)
-    df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
+        # validation split
+        valid_split = 0.1
+        splitter = GroupShuffleSplit(n_splits=1, test_size=valid_split, random_state=42)
+        train_ind, val_ind = next(splitter.split(df_all, groups=df_all["ancestor_id"]))
+        df_train = (
+            df_all.loc[train_ind]
+            .dropna(subset=["source", "rank"])
+            .reset_index(drop=True)
+        )
+        df_valid = (
+            df_all.loc[val_ind].dropna(subset=["source", "rank"]).reset_index(drop=True)
+        )
+        df_train_md = (
+            df_train[df_train["cell_type"] == "markdown"]
+            .dropna(subset=["source", "rank"])
+            .reset_index(drop=True)
+        )
+        df_valid_md = (
+            df_valid[df_valid["cell_type"] == "markdown"]
+            .dropna(subset=["source", "rank"])
+            .reset_index(drop=True)
+        )
+        df_train_md.to_csv(f"{args.root_path}/train_md.csv", index=False)
+        df_valid_md.to_csv(f"{args.root_path}/valid_md.csv", index=False)
+        df_train.to_csv(f"{args.root_path}/train.csv", index=False)
+        df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
 
     # 이상한 버그? nan 데이터가 여전히 포함되어 있어 다시 읽은 뒤 없애고 저장
     # 앞서 분명히 source/rank에 대한 nan row를 없앴는데도 매번 남아 있는 문제
