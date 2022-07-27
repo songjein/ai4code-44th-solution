@@ -32,7 +32,7 @@ class PointwiseDataset(Dataset):
 
         code_inputs = self.tokenizer.batch_encode_plus(
             [str(x) for x in self.ctx[row.id]["codes"]],
-            add_special_tokens=True,
+            add_special_tokens=False,
             max_length=code_max_len_,
             truncation=True,
         )
@@ -42,7 +42,7 @@ class PointwiseDataset(Dataset):
 
         ids = inputs["input_ids"]
         for x in code_inputs["input_ids"]:
-            ids.extend(x[:-1])  # 중간 중간 </s> 없애기
+            ids.extend([sep_token_id] + x)
         ids = ids[: self.total_max_len - 1] + [sep_token_id]
         mask = [1] * len(ids)
         if len(ids) != self.total_max_len:
@@ -143,7 +143,7 @@ if __name__ == "__main__":
             .dropna()
             .reset_index(drop=True)
         )
-        valid_ctx = json.load(open("./data/valid_ctx_50.json"))
+        valid_ctx = json.load(open("./data/valid_ctx_30.json"))
         dataset = PointwiseDataset(
             df_valid_md,
             model_name_or_path="microsoft/codebert-base",
@@ -154,5 +154,6 @@ if __name__ == "__main__":
         )
 
     for idx, data in enumerate(dataset):
+        print(data)
         if idx > 100:
             break
