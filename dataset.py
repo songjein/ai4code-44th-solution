@@ -2,6 +2,8 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
+from preprocess import clean_code
+
 
 class PointwiseDataset(Dataset):
     def __init__(self, df, model_name_or_path, total_max_len, md_max_len, ctx):
@@ -15,7 +17,7 @@ class PointwiseDataset(Dataset):
     def __getitem__(self, index):
         row = self.df.iloc[index]
         inputs = self.tokenizer.encode_plus(
-            row.source,
+            clean_code(row.source),
             None,
             add_special_tokens=True,
             max_length=self.md_max_len,
@@ -28,7 +30,7 @@ class PointwiseDataset(Dataset):
         code_max_len_ = (self.total_max_len - self.md_max_len) // num_codes
 
         code_inputs = self.tokenizer.batch_encode_plus(
-            [str(x) for x in self.ctx[row.id]["codes"]],
+            [clean_code(str(x)) for x in self.ctx[row.id]["codes"]],
             add_special_tokens=False,
             max_length=code_max_len_,
             truncation=True,
@@ -78,7 +80,7 @@ class PairwiseDataset(Dataset):
         md_cell_id, code_cell_id, label = self.samples[index]
 
         md_inputs = self.tokenizer.encode_plus(
-            self.id2src[md_cell_id],
+            clean_code(self.id2src[md_cell_id]),
             None,
             add_special_tokens=False,
             max_length=self.md_max_len,
@@ -86,7 +88,7 @@ class PairwiseDataset(Dataset):
             truncation=True,
         )
         code_inputs = self.tokenizer.encode_plus(
-            self.id2src[code_cell_id],
+            clean_code(self.id2src[code_cell_id]),
             None,
             add_special_tokens=False,
             max_length=self.code_max_len,
