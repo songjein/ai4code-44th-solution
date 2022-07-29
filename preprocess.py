@@ -12,10 +12,10 @@ from sklearn.model_selection import GroupShuffleSplit
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description="전처리 관련 파라미터")
-parser.add_argument("--root_path", type=str, default="./data")
-parser.add_argument("--num_sampled_code_cell", type=int, default=30)
-parser.add_argument("--window_size", type=int, default=30)
-parser.add_argument("--skip_create_from_scratch", action="store_true")
+parser.add_argument("--root-path", type=str, default="./data")
+parser.add_argument("--num-sampled-code-cell", type=int, default=30)
+parser.add_argument("--window-size", type=int, default=30)
+parser.add_argument("--skip-create-from-scratch", action="store_true")
 
 
 def read_notebook(path):
@@ -43,8 +43,6 @@ def clean_code(cell):
 
 def sample_cells(cells, n):
     """
-    .. note::
-        실제로 어떻게 뽑히고 있는지 한 번 확인해볼 필요 있음
     .. note::
         더 똑똑하게 추출하기
     """
