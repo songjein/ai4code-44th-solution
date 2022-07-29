@@ -81,30 +81,43 @@ def build_context_dict(df, num_sampled_code_cell=30):
     return features
 
 
-def make_contexts_by_sliding_window(cells, window_size):
-    cells = [clean_code(cell) for cell in cells]
-    if window_size >= len(cells):
-        return [cells]
+def make_md_code_pairs_by_sliding_window(md_cells, code_cells, pct_ranks, window_size):
+    """
+    :return: Tuple(윈도우 인덱스, 전체 윈도우 개수, 마크다운 셀, 코드셀 윈도우, 랭크 퍼센타일)
+    """
+    pairs = []
+    md_cells = [clean_code(cell) for cell in md_cells]
+    code_cells = [clean_code(cell) for cell in code_cells]
+
+    if window_size >= len(code_cells):
+        window = code_cells
+        for md_cell, pct_rank in zip(md_cells, pct_ranks):
+            pairs.append((0, 1, md_cell, window, pct_rank))
     else:
-        windows = []
-        num_context = math.ceil(len(cells) / window_size)
-        for i in range(num_context):
-            offset = i * window_size
-            windows.append(cells[offset : offset + window_size])
-        return windows
+        n_windows = math.ceil(len(code_cells) / window_size)
+        for w_idx in range(n_windows):
+            offset = w_idx * window_size
+            window = code_cells[offset : offset + window_size]
+            for md_cell, pct_rank in zip(md_cells, pct_ranks):
+                pairs.append((w_idx, n_windows, md_cell, window, pct_rank))
+
+    return pairs
 
 
-def build_sliding_window_context_dict(df, window_size=30):
-    features = dict()
+def build_sliding_window_pairs(df, window_size=30):
     df = df.sort_values("rank").reset_index(drop=True)
+    pairs = []
     for idx, sub_df in tqdm(df.groupby("id")):
-        features[idx] = dict()
+        md_sub_df = sub_df[sub_df.cell_type == "markdown"]
         code_sub_df = sub_df[sub_df.cell_type == "code"]
-        windows = make_contexts_by_sliding_window(
-            code_sub_df.source.values, window_size
+        sub_pairs = make_md_code_pairs_by_sliding_window(
+            md_sub_df.source.values,
+            code_sub_df.source.values,
+            md_sub_df.pct_rank.values,
+            window_size,
         )
-        features[idx]["windows"] = windows
-    return features
+        pairs += sub_pairs
+    return pairs
 
 
 if __name__ == "__main__":
@@ -229,22 +242,18 @@ if __name__ == "__main__":
     )
 
     # 슬라이딩 윈도우기반 컨텍스트 생성
-    train_sliding_window_context_dict = build_sliding_window_context_dict(
-        df_train, args.window_size
-    )
+    train_sliding_window_pairs = build_sliding_window_pairs(df_train, args.window_size)
     json.dump(
-        train_sliding_window_context_dict,
+        train_sliding_window_pairs,
         open(
-            f"{args.root_path}/train_sliding_window_{args.window_size}_ctx.json", "wt"
+            f"{args.root_path}/train_sliding_window_{args.window_size}_pairs.json", "wt"
         ),
     )
 
-    valid_sliding_window_context_dict = build_sliding_window_context_dict(
-        df_valid, args.window_size
-    )
+    valid_sliding_window_pairs = build_sliding_window_pairs(df_valid, args.window_size)
     json.dump(
-        valid_sliding_window_context_dict,
+        valid_sliding_window_pairs,
         open(
-            f"{args.root_path}/valid_sliding_window_{args.window_size}_ctx.json", "wt"
+            f"{args.root_path}/valid_sliding_window_{args.window_size}_pairs.json", "wt"
         ),
     )

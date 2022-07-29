@@ -15,7 +15,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from dataset import PairwiseDataset, PointwiseDataset
+from dataset import (PairwiseDataset, PointwiseDataset,
+                     SlidingWindowPointwiseDataset)
 from metrics import kendall_tau
 from model import PercentileRegressor
 
@@ -25,11 +26,22 @@ parser.add_argument("--data-dir", type=str, default="./data/")
 parser.add_argument("--train-orders-path", type=str, default="./data/train_orders.csv")
 parser.add_argument("--train-md-path", type=str, default="./data/train_md.csv")
 parser.add_argument("--train-context-path", type=str, default="./data/train_ctx.json")
+parser.add_argument(
+    "--train-sliding-window-pairs-path",
+    type=str,
+    default="./data/train_sliding_window_30_pairs.json",
+)
 parser.add_argument("--valid-md-path", type=str, default="./data/valid_md.csv")
 parser.add_argument("--valid-context-path", type=str, default="./data/valid_ctx.json")
+parser.add_argument(
+    "--valid-sliding-window-pairs-path",
+    type=str,
+    default="./data/valid_sliding_window_30_pairs.json",
+)
 parser.add_argument("--train-path", type=str, default="./data/train.csv")
 parser.add_argument("--valid-path", type=str, default="./data/valid.csv")
 
+parser.add_argument("--learning-rate", type=float, default=3e-5)
 parser.add_argument("--md-max-len", type=int, default=48)
 parser.add_argument("--total-max-len", type=int, default=512)
 parser.add_argument("--batch-size", type=int, default=64)
@@ -74,7 +86,7 @@ def generate_pairs_with_label(df, mode="train", negative_seletion_ratio=0.05):
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    assert args.train_mode in ["pointwise", "pairwise"]
+    assert args.train_mode in ["pointwise", "sliding-window-pointwise", "pairwise"]
 
     output_dir = f"outputs_{args.train_mode}_{args.memo}_{args.seed}"
     os.makedirs(f"./{output_dir}", exist_ok=True)
@@ -122,7 +134,24 @@ if __name__ == "__main__":
             md_max_len=args.md_max_len,
             ctx=valid_ctx,
         )
-    else:
+    elif args.train_mode == "sliding-window-pointwise":
+        with open(args.train_sliding_window_pairs_path, "r", encoding="utf-8") as f:
+            train_sliding_window_pairs = json.loads(f.read())
+        train_ds = SlidingWindowPointwiseDataset(
+            train_sliding_window_pairs,
+            args.model_name_or_path,
+            total_max_len=args.total_max_len,
+            md_max_len=args.md_max_len,
+        )
+        with open(args.valid_sliding_window_pairs_path, "r", encoding="utf-8") as f:
+            valid_sliding_window_pairs = json.loads(f.read())
+        valid_ds = SlidingWindowPointwiseDataset(
+            valid_sliding_window_pairs,
+            args.model_name_or_path,
+            total_max_len=args.total_max_len,
+            md_max_len=args.md_max_len,
+        )
+    elif args.train_mode == "pairwise":
         train_samples = generate_pairs_with_label(train_df, mode="train")
         train_ds = PairwiseDataset(
             train_samples,
@@ -139,6 +168,8 @@ if __name__ == "__main__":
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
         )
+    else:
+        raise Exception("invalid train mode")
 
     train_loader = DataLoader(
         train_ds,
@@ -200,14 +231,14 @@ if __name__ == "__main__":
         num_train_optimization_steps = int(
             args.epochs * len(train_loader) / args.accumulation_steps
         )
-        optimizer = AdamW(optimizer_grouped_parameters, lr=3e-5)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
             num_warmup_steps=0.05 * num_train_optimization_steps,
             num_training_steps=num_train_optimization_steps,
         )
 
-        if args.train_mode == "pointwise":
+        if args.train_mode in ["pointwise", "sliding-window-pointwise"]:
             criterion = torch.nn.L1Loss()
         else:
             criterion = torch.nn.BCEWithLogitsLoss()
@@ -247,7 +278,7 @@ if __name__ == "__main__":
                     f"Epoch {e + 1} Loss: {avg_loss} lr: {scheduler.get_last_lr()}"
                 )
 
-            if args.train_mode == "pointwise":
+            if args.train_mode in ["pointwise", "sliding-window-pointwise"]:
                 y_val, y_pred = validate(model, valid_loader)
                 valid_df["pred"] = valid_df.groupby(["id", "cell_type"])["rank"].rank(
                     pct=True
