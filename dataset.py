@@ -98,13 +98,13 @@ class PairwiseDataset(Dataset):
         sep_token_id = self.tokenizer.sep_token_id
         pad_token_id = self.tokenizer.pad_token_id
 
-        md_inputs["input_ids"] = md_inputs["input_ids"][: self.md_max_len - 2]
+        md_inputs["input_ids"] = md_inputs["input_ids"][: self.md_max_len - 1]
         code_inputs["input_ids"] = code_inputs["input_ids"][: self.code_max_len - 2]
 
         ids = (
             [cls_token_id]
             + md_inputs["input_ids"]
-            + [sep_token_id, sep_token_id]
+            + [sep_token_id]
             + code_inputs["input_ids"]
             + [sep_token_id]
         )
