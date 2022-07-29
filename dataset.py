@@ -63,8 +63,8 @@ class PairwiseDataset(Dataset):
         samples,
         df,
         model_name_or_path,
-        total_max_len=128,
-        md_max_len=64,
+        total_max_len=96,
+        md_max_len=48,
     ):
         super().__init__()
         self.samples = samples
@@ -81,7 +81,7 @@ class PairwiseDataset(Dataset):
             self.id2src[md_cell_id],
             None,
             add_special_tokens=False,
-            max_length=self.md_max_len - 2,  # special token
+            max_length=self.md_max_len,
             return_token_type_ids=True,
             truncation=True,
         )
@@ -89,7 +89,7 @@ class PairwiseDataset(Dataset):
             self.id2src[code_cell_id],
             None,
             add_special_tokens=False,
-            max_length=self.code_max_len - 2,  # special token
+            max_length=self.code_max_len,
             return_token_type_ids=True,
             truncation=True,
         )
@@ -97,6 +97,9 @@ class PairwiseDataset(Dataset):
         cls_token_id = self.tokenizer.cls_token_id
         sep_token_id = self.tokenizer.sep_token_id
         pad_token_id = self.tokenizer.pad_token_id
+
+        md_inputs["input_ids"] = md_inputs["input_ids"][: self.md_max_len - 2]
+        code_inputs["input_ids"] = code_inputs["input_ids"][: self.code_max_len - 2]
 
         ids = (
             [cls_token_id]
@@ -133,7 +136,7 @@ if __name__ == "__main__":
         samples = generate_pairs_with_label(df)
         dataset = PairwiseDataset(samples, df, "microsoft/codebert-base")
 
-    if True:
+    if False:
         df_valid_md = (
             pd.read_csv("./data/valid_md.csv")
             .drop("parent_id", axis=1)

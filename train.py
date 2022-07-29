@@ -31,9 +31,6 @@ parser.add_argument("--train_path", type=str, default="./data/train.csv")
 parser.add_argument("--valid_path", type=str, default="./data/valid.csv")
 
 parser.add_argument("--md_max_len", type=int, default=48)
-parser.add_argument(
-    "--code_max_len", type=int, default=22, help="pairwise에서만 사용, pointwise에선 동적 계산"
-)
 parser.add_argument("--total_max_len", type=int, default=512)
 parser.add_argument("--batch_size", type=int, default=64)
 parser.add_argument("--accumulation_steps", type=int, default=4)
@@ -53,30 +50,24 @@ def seed_everything(seed=42):
     torch.backends.cudnn.deterministic = True
 
 
-def generate_pairs_with_label(df, mode="train", pos_neg_times=10):
+def generate_pairs_with_label(df, mode="train", negative_seletion_ratio=0.05):
     samples = []
     for id, df_sub in tqdm(df.groupby("id")):
         df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
         df_sub_code = df_sub[df_sub["cell_type"] == "code"]
         df_sub_code_rank = df_sub_code["rank"].values
         df_sub_code_cell_id = df_sub_code["cell_id"].values
-        pos_samples = []
-        neg_samples = []
         for md_cell_id, md_rank in df_sub_md[["cell_id", "rank"]].values:
             labels = np.array(
                 [((md_rank + 1) == code_rank) for code_rank in df_sub_code_rank]
             ).astype("int")
             for code_cell_id, label in zip(df_sub_code_cell_id, labels):
                 if mode == "test":
-                    pos_samples.append([md_cell_id, code_cell_id, label])
+                    samples.append([md_cell_id, code_cell_id, label])
                 elif label == 1:
-                    pos_samples.append([md_cell_id, code_cell_id, label])
-                elif label == 0:
-                    neg_samples.append([md_cell_id, code_cell_id, label])
-        random.shuffle(neg_samples)
-        _samples = pos_samples + neg_samples[: len(pos_samples) * pos_neg_times]
-        random.shuffle(_samples)
-        samples += _samples
+                    samples.append([md_cell_id, code_cell_id, label])
+                elif label == 0 and random.uniform(0, 1) < negative_seletion_ratio:
+                    samples.append([md_cell_id, code_cell_id, label])
     return samples
 
 
@@ -85,17 +76,13 @@ if __name__ == "__main__":
 
     assert args.train_mode in ["pointwise", "pairwise"]
 
-    if args.train_mode == "pairwise":
-        args.total_max_len = 128
-        args.md_max_len = 64
-
     output_dir = f"outputs_{args.train_mode}_{args.memo}_{args.seed}"
     os.makedirs(f"./{output_dir}", exist_ok=True)
     data_dir = Path(args.data_dir)
 
     seed_everything(args.seed)
 
-    df_train_md = (
+    train_md_df = (
         pd.read_csv(args.train_md_path)
         .drop("parent_id", axis=1)
         .dropna()
@@ -104,7 +91,7 @@ if __name__ == "__main__":
     train_ctx = json.load(open(args.train_context_path))
     train_df = pd.read_csv(args.train_path)
 
-    df_valid_md = (
+    valid_md_df = (
         pd.read_csv(args.valid_md_path)
         .drop("parent_id", axis=1)
         .dropna()
@@ -122,14 +109,14 @@ if __name__ == "__main__":
 
     if args.train_mode == "pointwise":
         train_ds = PointwiseDataset(
-            df_train_md,
+            train_md_df,
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
             total_max_len=args.total_max_len,
             ctx=train_ctx,
         )
         valid_ds = PointwiseDataset(
-            df_valid_md,
+            valid_md_df,
             model_name_or_path=args.model_name_or_path,
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
@@ -144,7 +131,7 @@ if __name__ == "__main__":
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
         )
-        valid_samples = generate_pairs_with_label(valid_df, mode="test")
+        valid_samples = generate_pairs_with_label(valid_df, mode="train")
         valid_ds = PairwiseDataset(
             valid_samples,
             valid_df,
@@ -180,7 +167,6 @@ if __name__ == "__main__":
 
         preds = []
         labels = []
-
         with torch.no_grad():
             for idx, data in enumerate(tbar):
                 inputs, target = read_data(data)
