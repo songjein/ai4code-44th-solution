@@ -1,7 +1,9 @@
 import argparse
 import json
+import math
 import os
 import random
+import re
 from glob import glob
 
 import numpy as np
@@ -12,6 +14,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser(description="전처리 관련 파라미터")
 parser.add_argument("--root_path", type=str, default="./data")
 parser.add_argument("--num_sampled_code_cell", type=int, default=30)
+parser.add_argument("--window_size", type=int, default=30)
 parser.add_argument("--skip_create_from_scratch", action="store_true")
 
 
@@ -29,11 +32,13 @@ def get_ranks(gt, derived):
 
 
 def clean_code(cell):
-    """
-    .. note::
-        추가 전처리?
-    """
-    return str(cell).replace("\\n", "\n")
+    for char in ["\r\n", "\r", "\n"]:
+        cell = cell.replace(char, " ")
+    cell = re.sub(r"\s{1,}", " ", cell)
+    cell = re.sub(r"#{6,}", "", cell)
+    cell = re.sub(r"http\S+[^)]", "", cell)
+    cell = "\n".join([sent.strip() for sent in cell.split("\n")])
+    return cell
 
 
 def sample_cells(cells, n):
@@ -59,7 +64,7 @@ def sample_cells(cells, n):
         return results
 
 
-def get_features(df, num_sampled_code_cell=30):
+def build_context_dict(df, num_sampled_code_cell=30):
     """
     .. note::
         더 똑똑하게 추출하기
@@ -75,6 +80,32 @@ def get_features(df, num_sampled_code_cell=30):
         features[idx]["total_code"] = total_code
         features[idx]["total_md"] = total_md
         features[idx]["codes"] = codes
+    return features
+
+
+def make_contexts_by_sliding_window(cells, window_size):
+    cells = [clean_code(cell) for cell in cells]
+    if window_size >= len(cells):
+        return [cells]
+    else:
+        windows = []
+        num_context = math.ceil(len(cells) / window_size)
+        for i in range(num_context):
+            offset = i * window_size
+            windows.append(cells[offset : offset + window_size])
+        return windows
+
+
+def build_sliding_window_context_dict(df, window_size=30):
+    features = dict()
+    df = df.sort_values("rank").reset_index(drop=True)
+    for idx, sub_df in tqdm(df.groupby("id")):
+        features[idx] = dict()
+        code_sub_df = sub_df[sub_df.cell_type == "code"]
+        windows = make_contexts_by_sliding_window(
+            code_sub_df.source.values, window_size
+        )
+        features[idx]["windows"] = windows
     return features
 
 
@@ -186,18 +217,36 @@ if __name__ == "__main__":
     )
     df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
 
-    train_feature_transformed_samples = get_features(
-        df_train, args.num_sampled_code_cell
-    )
+    # k 개의 코드셀을 샘플링
+    train_context_dict = build_context_dict(df_train, args.num_sampled_code_cell)
     json.dump(
-        train_feature_transformed_samples,
+        train_context_dict,
         open(f"{args.root_path}/train_ctx_{args.num_sampled_code_cell}.json", "wt"),
     )
 
-    valid_feature_transformed_samples = get_features(
-        df_valid, args.num_sampled_code_cell
+    valid_context_dict = build_context_dict(df_valid, args.num_sampled_code_cell)
+    json.dump(
+        valid_context_dict,
+        open(f"{args.root_path}/valid_ctx_{args.num_sampled_code_cell}.json", "wt"),
+    )
+
+    # 슬라이딩 윈도우기반 컨텍스트 생성
+    train_sliding_window_context_dict = build_sliding_window_context_dict(
+        df_train, args.window_size
     )
     json.dump(
-        valid_feature_transformed_samples,
-        open(f"{args.root_path}/valid_ctx_{args.num_sampled_code_cell}.json", "wt"),
+        train_sliding_window_context_dict,
+        open(
+            f"{args.root_path}/train_sliding_window_{args.window_size}_ctx.json", "wt"
+        ),
+    )
+
+    valid_sliding_window_context_dict = build_sliding_window_context_dict(
+        df_valid, args.window_size
+    )
+    json.dump(
+        valid_sliding_window_context_dict,
+        open(
+            f"{args.root_path}/valid_sliding_window_{args.window_size}_ctx.json", "wt"
+        ),
     )
