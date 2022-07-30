@@ -26,11 +26,11 @@ class PointwiseDataset(Dataset):
         )
 
         # 개별 코드 셀 토큰의 최대 길이를 동적으로 결정
-        num_codes = len(self.ctx[row.id]["codes"])
+        num_codes = len(self.ctx[str(row.id)]["codes"])
         code_max_len_ = (self.total_max_len - self.md_max_len) // num_codes
 
         code_inputs = self.tokenizer.batch_encode_plus(
-            [clean_code(str(x)) for x in self.ctx[row.id]["codes"]],
+            [clean_code(str(x)) for x in self.ctx[str(row.id)]["codes"]],
             add_special_tokens=False,
             max_length=code_max_len_,
             truncation=True,

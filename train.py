@@ -48,7 +48,7 @@ parser.add_argument("--md-max-len", type=int, default=48)
 parser.add_argument("--total-max-len", type=int, default=512)
 parser.add_argument("--batch-size", type=int, default=64)
 parser.add_argument("--accumulation-steps", type=int, default=4)
-parser.add_argument("--epochs", type=int, default=3)
+parser.add_argument("--epochs", type=int, default=5)
 parser.add_argument("--n-workers", type=int, default=8)
 parser.add_argument("--seed", type=int, default=42)
 parser.add_argument("--train-mode", type=str, default="pointwise")
@@ -100,11 +100,9 @@ if __name__ == "__main__":
     df_train_md = (
         pd.read_csv(args.train_md_path)
         .drop("parent_id", axis=1)
-        .dropna()
         .reset_index(drop=True)
     )
     train_ctx = json.load(open(args.train_context_path))
-    df_train = pd.read_csv(args.train_path)
 
     df_valid_md = (
         pd.read_csv(args.valid_md_path)
@@ -116,6 +114,7 @@ if __name__ == "__main__":
     df_valid = pd.read_csv(args.valid_path)
 
     order_df = pd.read_csv(args.train_orders_path).set_index("id")
+    #: external 데이터에 대한 정보는 없지만, 벨리데이션 셋은 원본 학습 데이터에서만 나왔기 때문에 상관 없음
     df_orders = pd.read_csv(
         data_dir / "train_orders.csv",
         index_col="id",
@@ -138,6 +137,7 @@ if __name__ == "__main__":
             ctx=valid_ctx,
         )
     elif args.train_mode == "sliding-window-pointwise":
+        df_train = pd.read_csv(args.train_path)
         train_sliding_window_pairs = build_sliding_window_pairs(
             df_train, args.window_size
         )
@@ -157,6 +157,7 @@ if __name__ == "__main__":
             md_max_len=args.md_max_len,
         )
     elif args.train_mode == "pairwise":
+        df_train = pd.read_csv(args.train_path)
         train_samples = generate_pairs_with_label(df_train, mode="train")
         train_ds = PairwiseDataset(
             train_samples,

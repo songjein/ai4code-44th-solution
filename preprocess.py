@@ -261,7 +261,7 @@ if __name__ == "__main__":
     )
 
     # external 데이터 추가 버전 (odins0n/ai4code-custom-data)
-    df_extra_train = pd.read_csv("./data/custom_data_1.csv")
+    df_extra_train = pd.read_csv("./data/external_data.csv")
     df_extra_train["cell_id"] = df_extra_train["rank"].astype(str)
     df_extra_train["id"] = df_extra_train["notebook_id"].astype(str)
     df_extra_train = df_extra_train[
@@ -274,7 +274,7 @@ if __name__ == "__main__":
         .dropna(subset=["source", "rank"])
         .reset_index(drop=True)
     )
-    df_concat_train.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
+    df_concat_train.to_csv(f"{args.root_path}/concat_train.csv", index=False)
     df_concat_train_md.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
     concat_train_context_dict = build_context_dict(
         df_concat_train, args.num_sampled_code_cell
