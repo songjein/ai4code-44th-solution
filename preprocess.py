@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description="전처리 관련 파라미터")
 parser.add_argument("--root-path", type=str, default="./data")
-parser.add_argument("--num-sampled-code-cell", type=int, default=30)
+parser.add_argument("--num-sampled-code-cell", type=int, default=40)
 parser.add_argument("--window-size", type=int, default=30)
 parser.add_argument("--skip-create-from-scratch", action="store_true")
 
@@ -258,6 +258,32 @@ if __name__ == "__main__":
     json.dump(
         valid_context_dict,
         open(f"{args.root_path}/valid_ctx_{args.num_sampled_code_cell}.json", "wt"),
+    )
+
+    # external 데이터 추가 버전 (odins0n/ai4code-custom-data)
+    df_extra_train = pd.read_csv("./data/custom_data_1.csv")
+    df_extra_train["cell_id"] = df_extra_train["rank"].astype(str)
+    df_extra_train["id"] = df_extra_train["notebook_id"].astype(str)
+    df_extra_train = df_extra_train[
+        ["id", "cell_id", "cell_type", "source", "rank", "pct_rank"]
+    ]
+    df_extra_train = df_extra_train.dropna()
+    df_concat_train = pd.concat([df_train, df_extra_train])
+    df_concat_train_md = (
+        df_concat_train[df_concat_train["cell_type"] == "markdown"]
+        .dropna(subset=["source", "rank"])
+        .reset_index(drop=True)
+    )
+    df_concat_train.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
+    df_concat_train_md.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
+    concat_train_context_dict = build_context_dict(
+        df_concat_train, args.num_sampled_code_cell
+    )
+    json.dump(
+        concat_train_context_dict,
+        open(
+            f"{args.root_path}/concat_train_ctx_{args.num_sampled_code_cell}.json", "wt"
+        ),
     )
 
     # 슬라이딩 윈도우기반 컨텍스트 생성
