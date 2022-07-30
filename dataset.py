@@ -68,7 +68,7 @@ class SlidingWindowPointwiseDataset(Dataset):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
     def __getitem__(self, index):
-        w_idx, n_windows, md_cell, code_cells, pct_rank = self.pairs[index]
+        _, w_idx, n_windows, md_cell, code_cells, pct_rank = self.pairs[index]
         inputs = self.tokenizer.encode_plus(
             clean_code(md_cell),
             None,

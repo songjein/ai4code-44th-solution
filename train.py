@@ -3,6 +3,7 @@ import json
 import os
 import random
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,7 @@ from dataset import (PairwiseDataset, PointwiseDataset,
                      SlidingWindowPointwiseDataset)
 from metrics import kendall_tau
 from model import PercentileRegressor
+from preprocess import build_sliding_window_pairs
 
 parser = argparse.ArgumentParser(description="학습 관련 파라미터")
 parser.add_argument("--model-name-or-path", type=str, default="microsoft/codebert-base")
@@ -51,6 +53,7 @@ parser.add_argument("--n-workers", type=int, default=8)
 parser.add_argument("--seed", type=int, default=42)
 parser.add_argument("--train-mode", type=str, default="pointwise")
 parser.add_argument("--memo", type=str, default="")
+parser.add_argument("--window-size", type=int, default=30)
 
 
 def seed_everything(seed=42):
@@ -94,23 +97,23 @@ if __name__ == "__main__":
 
     seed_everything(args.seed)
 
-    train_md_df = (
+    df_train_md = (
         pd.read_csv(args.train_md_path)
         .drop("parent_id", axis=1)
         .dropna()
         .reset_index(drop=True)
     )
     train_ctx = json.load(open(args.train_context_path))
-    train_df = pd.read_csv(args.train_path)
+    df_train = pd.read_csv(args.train_path)
 
-    valid_md_df = (
+    df_valid_md = (
         pd.read_csv(args.valid_md_path)
         .drop("parent_id", axis=1)
         .dropna()
         .reset_index(drop=True)
     )
     valid_ctx = json.load(open(args.valid_context_path))
-    valid_df = pd.read_csv(args.valid_path)
+    df_valid = pd.read_csv(args.valid_path)
 
     order_df = pd.read_csv(args.train_orders_path).set_index("id")
     df_orders = pd.read_csv(
@@ -121,30 +124,32 @@ if __name__ == "__main__":
 
     if args.train_mode == "pointwise":
         train_ds = PointwiseDataset(
-            train_md_df,
+            df_train_md,
             model_name_or_path=args.model_name_or_path,
             md_max_len=args.md_max_len,
             total_max_len=args.total_max_len,
             ctx=train_ctx,
         )
         valid_ds = PointwiseDataset(
-            valid_md_df,
+            df_valid_md,
             model_name_or_path=args.model_name_or_path,
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
             ctx=valid_ctx,
         )
     elif args.train_mode == "sliding-window-pointwise":
-        with open(args.train_sliding_window_pairs_path, "r", encoding="utf-8") as f:
-            train_sliding_window_pairs = json.loads(f.read())
+        train_sliding_window_pairs = build_sliding_window_pairs(
+            df_train, args.window_size
+        )
         train_ds = SlidingWindowPointwiseDataset(
             train_sliding_window_pairs,
             args.model_name_or_path,
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
         )
-        with open(args.valid_sliding_window_pairs_path, "r", encoding="utf-8") as f:
-            valid_sliding_window_pairs = json.loads(f.read())
+        valid_sliding_window_pairs = build_sliding_window_pairs(
+            df_valid, args.window_size
+        )
         valid_ds = SlidingWindowPointwiseDataset(
             valid_sliding_window_pairs,
             args.model_name_or_path,
@@ -152,24 +157,22 @@ if __name__ == "__main__":
             md_max_len=args.md_max_len,
         )
     elif args.train_mode == "pairwise":
-        train_samples = generate_pairs_with_label(train_df, mode="train")
+        train_samples = generate_pairs_with_label(df_train, mode="train")
         train_ds = PairwiseDataset(
             train_samples,
-            train_df,
+            df_train,
             args.model_name_or_path,
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
         )
-        valid_samples = generate_pairs_with_label(valid_df, mode="train")
+        valid_samples = generate_pairs_with_label(df_valid, mode="train")
         valid_ds = PairwiseDataset(
             valid_samples,
-            valid_df,
+            df_valid,
             args.model_name_or_path,
             total_max_len=args.total_max_len,
             md_max_len=args.md_max_len,
         )
-    else:
-        raise Exception("invalid train mode")
 
     train_loader = DataLoader(
         train_ds,
@@ -278,14 +281,31 @@ if __name__ == "__main__":
                     f"Epoch {e + 1} Loss: {avg_loss} lr: {scheduler.get_last_lr()}"
                 )
 
-            if args.train_mode in ["pointwise", "sliding-window-pointwise"]:
-                y_val, y_pred = validate(model, valid_loader)
-                valid_df["pred"] = valid_df.groupby(["id", "cell_type"])["rank"].rank(
+            if args.train_mode == "pointwise":
+                y_val, y_preds = validate(model, valid_loader)
+                df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(
                     pct=True
                 )
-                valid_df.loc[valid_df["cell_type"] == "markdown", "pred"] = y_pred
+                df_valid.loc[df_valid["cell_type"] == "markdown", "pred"] = y_preds
                 y_dummy = (
-                    valid_df.sort_values("pred").groupby("id")["cell_id"].apply(list)
+                    df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
+                )
+                print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
+
+            elif args.train_mode == "sliding-window-pointwise":
+                _, y_preds = validate(model, valid_loader)
+                df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(
+                    pct=True
+                )
+                id2preds = defaultdict(list)
+                for pair, y_pred in zip(valid_sliding_window_pairs, y_preds):
+                    md_id = pair[0]
+                    id2preds[md_id].append(y_pred)
+                for idx in range(len(df_valid)):
+                    row = df_valid.iloc[idx]
+                    df_valid.at[idx, "pred"] = max(id2preds[f"{row.id}-{row.cell_id}"])
+                y_dummy = (
+                    df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
                 )
                 print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
             else:
@@ -293,10 +313,10 @@ if __name__ == "__main__":
                 def sigmoid(z):
                     return 1 / (1 + np.exp(-z))
 
-                y_val, y_pred = validate(model, valid_loader)
-                y_pred = sigmoid(y_pred) > 0.5
+                gt, preds = validate(model, valid_loader)
+                preds = sigmoid(preds) > 0.5
                 precision, recall, f1, _ = precision_recall_fscore_support(
-                    y_val, y_pred, average="binary", zero_division=0
+                    gt, preds, average="binary", zero_division=0
                 )
                 print(f"precision: {precision}")
                 print(f"recall: {recall}")
