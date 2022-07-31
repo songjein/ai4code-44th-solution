@@ -1,6 +1,11 @@
+import os
+
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from transformers import (AutoModelForMaskedLM, AutoTokenizer,
+                          DataCollatorForLanguageModeling,
+                          LineByLineTextDataset, Trainer, TrainingArguments)
 
 from preprocess import clean_code
 
@@ -20,17 +25,55 @@ def generate_md_code_pairs(df):
             ).astype("int")
             for code_source, label in zip(df_sub_code_source, labels):
                 if label == 1:
-                    samples.append([md_source, code_source])
+                    samples.append([md_source[:500], code_source[:500]])
     return samples
 
 
 if __name__ == "__main__":
 
-    df = pd.read_csv("./data/concat_train.csv")
-    df.source = df.source.apply(clean_code)
-    samples = generate_md_code_pairs(df)
+    make_dataset = True
+    corpus_path = "./data/text.txt"
+    model_name = "microsoft/codebert-base"
+    max_seq_len = 512
+    output_path = f"./pretrained_{model_name}"
+    batch_size = 512
+    epochs = 10
 
-    with open("./data/text.txt", "w", encoding="utf-8") as f:
-        for md, code in samples:
-            sentence = f"{md}</s>{code}"
-            f.write(sentence + "\n")
+    if make_dataset:
+        df = pd.read_csv("./data/concat_train.csv")
+        df.source = df.source.apply(clean_code)
+        samples = generate_md_code_pairs(df)
+        with open("./data/text.txt", "w", encoding="utf-8") as f:
+            for md, code in samples:
+                sentence = f"{md}</s>{code}"
+                f.write(sentence + "\n")
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForMaskedLM.from_pretrained(model_name)
+
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer, mlm=True, mlm_probability=0.15
+    )
+    dataset = LineByLineTextDataset(
+        tokenizer=tokenizer, file_path=corpus_path, block_size=max_seq_len
+    )
+
+    os.makedirs(output_path)
+
+    training_args = TrainingArguments(
+        output_dir=output_path,
+        overwrite_output_dir=True,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        save_steps=10000,
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        data_collator=data_collator,
+        train_dataset=dataset,
+    )
+
+    trainer.train()
+    trainer.save_model(output_path)
