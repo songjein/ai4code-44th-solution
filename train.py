@@ -325,8 +325,8 @@ if __name__ == "__main__":
 
             torch.save(model.state_dict(), f"./{output_dir}/model_{e}.bin")
 
-        return model, y_pred
+        return model
 
     model = PercentileRegressor(args.model_name_or_path)
     model = model.cuda()
-    model, y_pred = train(model, train_loader, valid_loader, epochs=args.epochs)
+    model = train(model, train_loader, valid_loader, epochs=args.epochs)
