@@ -31,13 +31,13 @@ def generate_md_code_pairs(df):
 
 if __name__ == "__main__":
 
-    make_dataset = True
+    make_dataset = False
     corpus_path = "./data/text.txt"
     model_name = "microsoft/codebert-base"
     max_seq_len = 512
     output_path = f"./pretrained_{model_name}"
-    batch_size = 512
-    epochs = 10
+    batch_size = 48
+    epochs = 5
 
     if make_dataset:
         df = pd.read_csv("./data/concat_train.csv")
@@ -58,14 +58,16 @@ if __name__ == "__main__":
         tokenizer=tokenizer, file_path=corpus_path, block_size=max_seq_len
     )
 
-    os.makedirs(output_path)
+    os.makedirs(output_path, exist_ok=True)
 
     training_args = TrainingArguments(
         output_dir=output_path,
         overwrite_output_dir=True,
         num_train_epochs=epochs,
+        gradient_accumulation_steps=8,
+        fp16=True,
         per_device_train_batch_size=batch_size,
-        save_steps=10000,
+        save_steps=100000,
     )
 
     trainer = Trainer(
