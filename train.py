@@ -98,9 +98,7 @@ if __name__ == "__main__":
     seed_everything(args.seed)
 
     df_train_md = (
-        pd.read_csv(args.train_md_path)
-        .drop("parent_id", axis=1)
-        .reset_index(drop=True)
+        pd.read_csv(args.train_md_path).drop("parent_id", axis=1).reset_index(drop=True)
     )
     train_ctx = json.load(open(args.train_context_path))
 

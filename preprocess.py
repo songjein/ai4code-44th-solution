@@ -231,6 +231,36 @@ if __name__ == "__main__":
         df_train.to_csv(f"{args.root_path}/train.csv", index=False)
         df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
 
+        # external 데이터 추가 버전 (odins0n/ai4code-custom-data)
+        df_extra_train = pd.read_csv("./data/external_data.csv")
+        df_extra_train = df_extra_train.dropna()
+        df_extra_train["cell_id"] = df_extra_train["rank"].astype(str)
+        df_extra_train["id"] = df_extra_train["notebook_id"].astype(str)
+        df_extra_train = df_extra_train[
+            ["id", "cell_id", "cell_type", "source", "rank", "pct_rank"]
+        ]
+
+        # code만 있거나, md만 있는 경우 체크
+        del_n_ids = []
+        for idx, sub_df in tqdm(df_extra_train.groupby("id")):
+            n_md = sub_df[sub_df.cell_type == "markdown"].shape[0]
+            n_code = sub_df[sub_df.cell_type == "code"].shape[0]
+            if n_md == 0 or n_code == 0:
+                del_n_ids.append(sub_df.id.values[0])
+
+        # code만 있거나, md만 있는 경우 제거 (23분 소요)
+        for n_id in tqdm(del_n_ids):
+            df_extra_train = df_extra_train[df_extra_train["id"] != n_id]
+
+        df_concat_train = pd.concat([df_train, df_extra_train])
+        df_concat_train_md = (
+            df_concat_train[df_concat_train["cell_type"] == "markdown"]
+            .dropna(subset=["source", "rank"])
+            .reset_index(drop=True)
+        )
+        df_concat_train.to_csv(f"{args.root_path}/concat_train.csv", index=False)
+        df_concat_train_md.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
+
     # 이상한 버그? nan 데이터가 여전히 포함되어 있어 다시 읽은 뒤 없애고 저장
     # 앞서 분명히 source/rank에 대한 nan row를 없앴는데도 매번 남아 있는 문제
     pd.read_csv(f"{args.root_path}/train_md.csv").dropna(
@@ -262,37 +292,8 @@ if __name__ == "__main__":
         open(f"{args.root_path}/valid_ctx_{args.num_sampled_code_cell}.json", "wt"),
     )
 
-    # external 데이터 추가 버전 (odins0n/ai4code-custom-data)
-    df_extra_train = pd.read_csv("./data/external_data.csv")
-    df_extra_train = df_extra_train.dropna()
-    df_extra_train["cell_id"] = df_extra_train["rank"].astype(str)
-    df_extra_train["id"] = df_extra_train["notebook_id"].astype(str)
-    df_extra_train = df_extra_train[
-        ["id", "cell_id", "cell_type", "source", "rank", "pct_rank"]
-    ]
-
-    # code만 있거나, md만 있는 경우 체크
-    del_n_ids = []
-    for idx, sub_df in tqdm(df_extra_train.groupby("id")):
-        n_md = sub_df[sub_df.cell_type == "markdown"].shape[0]
-        n_code = sub_df[sub_df.cell_type == "code"].shape[0]
-        if n_md == 0 or n_code == 0:
-            del_n_ids.append(sub_df.id.values[0])
-
-    # code만 있거나, md만 있는 경우 제거 (23분 소요)
-    for n_id in tqdm(del_n_ids):
-        df_extra_train = df_extra_train[df_extra_train["id"] != n_id]
-
-    df_concat_train = pd.concat([df_train, df_extra_train])
-    df_concat_train_md = (
-        df_concat_train[df_concat_train["cell_type"] == "markdown"]
-        .dropna(subset=["source", "rank"])
-        .reset_index(drop=True)
-    )
-    df_concat_train.to_csv(f"{args.root_path}/concat_train.csv", index=False)
-    df_concat_train_md.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
-
     # extra 추가 버전 컨텍스트 추출
+    df_concat_train = pd.read_csv(f"{args.root_path}/concat_train.csv")
     concat_train_context_dict = build_context_dict(
         df_concat_train, args.num_sampled_code_cell
     )
