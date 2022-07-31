@@ -86,16 +86,150 @@ def generate_pairs_with_label(df, mode="train", negative_seletion_ratio=0.05):
     return samples
 
 
+def read_data(data):
+    return tuple(d.cuda() for d in data[:-1]), data[-1].cuda()
+
+
+def validate(model, valid_loader):
+    model.eval()
+    tbar = tqdm(valid_loader, file=sys.stdout)
+    preds = []
+    labels = []
+    with torch.no_grad():
+        for idx, data in enumerate(tbar):
+            inputs, target = read_data(data)
+            with torch.cuda.amp.autocast():
+                pred = model(*inputs)
+            preds.append(pred.detach().cpu().numpy().ravel())
+            labels.append(target.detach().cpu().numpy().ravel())
+
+    return np.concatenate(labels), np.concatenate(preds)
+
+
+def train(model, train_loader, valid_loader, df_valid, df_orders, args):
+    param_optimizer = list(model.named_parameters())
+    no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [
+                p for n, p in param_optimizer if not any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.01,
+        },
+        {
+            "params": [
+                p for n, p in param_optimizer if any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.0,
+        },
+    ]
+
+    num_train_optimization_steps = int(
+        args.epochs * len(train_loader) / args.accumulation_steps
+    )
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=0.05 * num_train_optimization_steps,
+        num_training_steps=num_train_optimization_steps,
+    )
+
+    if args.train_mode in ["pointwise", "sliding-window-pointwise"]:
+        criterion = torch.nn.L1Loss()
+    else:
+        criterion = torch.nn.BCEWithLogitsLoss()
+
+    scaler = torch.cuda.amp.GradScaler()
+
+    for e in range(args.epochs):
+        model.train()
+        tbar = tqdm(train_loader, file=sys.stdout)
+        loss_list = []
+        preds = []
+        labels = []
+
+        for idx, data in enumerate(tbar):
+            inputs, target = read_data(data)
+
+            with torch.cuda.amp.autocast():
+                pred = model(*inputs)
+                loss = criterion(pred, target)
+            scaler.scale(loss).backward()
+
+            if idx % args.accumulation_steps == 0 or idx == len(tbar) - 1:
+                scaler.unscale_(optimizer)
+                clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+                scheduler.step()
+
+            loss_list.append(loss.detach().cpu().item())
+            preds.append(pred.detach().cpu().numpy().ravel())
+            labels.append(target.detach().cpu().numpy().ravel())
+
+            avg_loss = np.round(np.mean(loss_list), 4)
+
+            tbar.set_description(
+                f"Epoch {e + 1} Loss: {avg_loss} lr: {scheduler.get_last_lr()}"
+            )
+
+        if args.train_mode == "pointwise":
+            y_val, y_preds = validate(model, valid_loader)
+            df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(
+                pct=True
+            )
+            df_valid.loc[df_valid["cell_type"] == "markdown", "pred"] = y_preds
+            y_dummy = df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
+            print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
+
+        elif args.train_mode == "sliding-window-pointwise":
+            _, y_preds = validate(model, valid_loader)
+            df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(
+                pct=True
+            )
+            id2preds = defaultdict(list)
+            for pair, y_pred in zip(valid_sliding_window_pairs, y_preds):
+                md_id = pair[0]
+                id2preds[md_id].append(y_pred)
+            for idx in range(len(df_valid)):
+                row = df_valid.iloc[idx]
+                df_valid.at[idx, "pred"] = max(id2preds[f"{row.id}-{row.cell_id}"])
+            y_dummy = df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
+            print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
+        else:
+
+            def sigmoid(z):
+                return 1 / (1 + np.exp(-z))
+
+            gt, preds = validate(model, valid_loader)
+            preds = sigmoid(preds) > 0.5
+            precision, recall, f1, _ = precision_recall_fscore_support(
+                gt, preds, average="binary", zero_division=0
+            )
+            print(f"precision: {precision}")
+            print(f"recall: {recall}")
+            print(f"f1: {f1}")
+
+        torch.save(model.state_dict(), f"./{output_dir}/model_{e}.bin")
+
+    return model
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
+    seed_everything(args.seed)
 
     assert args.train_mode in ["pointwise", "sliding-window-pointwise", "pairwise"]
+    assert args.model_name_or_path in [
+        "microsoft/codebert-base",
+        "microsoft/graphcodebert-base",
+        "huggingface/CodeBERTa-small-v1",
+    ]
 
     output_dir = f"outputs_{args.train_mode}_{args.memo}_{args.seed}"
     os.makedirs(f"./{output_dir}", exist_ok=True)
     data_dir = Path(args.data_dir)
-
-    seed_everything(args.seed)
 
     df_train_md = (
         pd.read_csv(args.train_md_path).drop("parent_id", axis=1).reset_index(drop=True)
@@ -111,10 +245,9 @@ if __name__ == "__main__":
     valid_ctx = json.load(open(args.valid_context_path))
     df_valid = pd.read_csv(args.valid_path)
 
-    order_df = pd.read_csv(args.train_orders_path).set_index("id")
     #: external 데이터에 대한 정보는 없지만, 벨리데이션 셋은 원본 학습 데이터에서만 나왔기 때문에 상관 없음
     df_orders = pd.read_csv(
-        data_dir / "train_orders.csv",
+        args.train_orders_path,
         index_col="id",
         squeeze=True,
     ).str.split()
@@ -190,141 +323,6 @@ if __name__ == "__main__":
         drop_last=False,
     )
 
-    def read_data(data):
-        return tuple(d.cuda() for d in data[:-1]), data[-1].cuda()
-
-    def validate(model, valid_loader):
-        model.eval()
-
-        tbar = tqdm(valid_loader, file=sys.stdout)
-
-        preds = []
-        labels = []
-        with torch.no_grad():
-            for idx, data in enumerate(tbar):
-                inputs, target = read_data(data)
-
-                with torch.cuda.amp.autocast():
-                    pred = model(*inputs)
-
-                preds.append(pred.detach().cpu().numpy().ravel())
-                labels.append(target.detach().cpu().numpy().ravel())
-
-        return np.concatenate(labels), np.concatenate(preds)
-
-    def train(model, train_loader, valid_loader, epochs):
-        param_optimizer = list(model.named_parameters())
-        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [
-                    p for n, p in param_optimizer if not any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": 0.01,
-            },
-            {
-                "params": [
-                    p for n, p in param_optimizer if any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": 0.0,
-            },
-        ]
-
-        num_train_optimization_steps = int(
-            args.epochs * len(train_loader) / args.accumulation_steps
-        )
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=0.05 * num_train_optimization_steps,
-            num_training_steps=num_train_optimization_steps,
-        )
-
-        if args.train_mode in ["pointwise", "sliding-window-pointwise"]:
-            criterion = torch.nn.L1Loss()
-        else:
-            criterion = torch.nn.BCEWithLogitsLoss()
-
-        scaler = torch.cuda.amp.GradScaler()
-
-        for e in range(epochs):
-            model.train()
-            tbar = tqdm(train_loader, file=sys.stdout)
-            loss_list = []
-            preds = []
-            labels = []
-
-            for idx, data in enumerate(tbar):
-                inputs, target = read_data(data)
-
-                with torch.cuda.amp.autocast():
-                    pred = model(*inputs)
-                    loss = criterion(pred, target)
-                scaler.scale(loss).backward()
-
-                if idx % args.accumulation_steps == 0 or idx == len(tbar) - 1:
-                    scaler.unscale_(optimizer)
-                    clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                    optimizer.zero_grad()
-                    scheduler.step()
-
-                loss_list.append(loss.detach().cpu().item())
-                preds.append(pred.detach().cpu().numpy().ravel())
-                labels.append(target.detach().cpu().numpy().ravel())
-
-                avg_loss = np.round(np.mean(loss_list), 4)
-
-                tbar.set_description(
-                    f"Epoch {e + 1} Loss: {avg_loss} lr: {scheduler.get_last_lr()}"
-                )
-
-            if args.train_mode == "pointwise":
-                y_val, y_preds = validate(model, valid_loader)
-                df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(
-                    pct=True
-                )
-                df_valid.loc[df_valid["cell_type"] == "markdown", "pred"] = y_preds
-                y_dummy = (
-                    df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
-                )
-                print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
-
-            elif args.train_mode == "sliding-window-pointwise":
-                _, y_preds = validate(model, valid_loader)
-                df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(
-                    pct=True
-                )
-                id2preds = defaultdict(list)
-                for pair, y_pred in zip(valid_sliding_window_pairs, y_preds):
-                    md_id = pair[0]
-                    id2preds[md_id].append(y_pred)
-                for idx in range(len(df_valid)):
-                    row = df_valid.iloc[idx]
-                    df_valid.at[idx, "pred"] = max(id2preds[f"{row.id}-{row.cell_id}"])
-                y_dummy = (
-                    df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
-                )
-                print("Preds score", kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
-            else:
-
-                def sigmoid(z):
-                    return 1 / (1 + np.exp(-z))
-
-                gt, preds = validate(model, valid_loader)
-                preds = sigmoid(preds) > 0.5
-                precision, recall, f1, _ = precision_recall_fscore_support(
-                    gt, preds, average="binary", zero_division=0
-                )
-                print(f"precision: {precision}")
-                print(f"recall: {recall}")
-                print(f"f1: {f1}")
-
-            torch.save(model.state_dict(), f"./{output_dir}/model_{e}.bin")
-
-        return model
-
     model = PercentileRegressor(args.model_name_or_path)
     model = model.cuda()
-    model = train(model, train_loader, valid_loader, epochs=args.epochs)
+    model = train(model, train_loader, valid_loader, df_valid, df_orders, args=args)
