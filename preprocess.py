@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(description="전처리 관련 파라미터")
 parser.add_argument("--root-path", type=str, default="./data")
 parser.add_argument("--num-sampled-code-cell", type=int, default=40)
 parser.add_argument("--window-size", type=int, default=30)
+parser.add_argument("--random-context-sample", action="store_true")
 parser.add_argument("--skip-create-from-scratch", action="store_true")
 
 
@@ -99,7 +100,7 @@ def build_context_dict(
         code_sub_df = sub_df[sub_df.cell_type == "code"]
         total_code = code_sub_df.shape[0]
         codes = sample_cells(
-            code_sub_df.source.values,
+            code_sub_df.source.values.tolist(),
             num_sampled_code_cell,
             from_last=make_sample_from_last,
             random_choice=make_sample_randomly,
@@ -306,29 +307,46 @@ if __name__ == "__main__":
     )
     df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
 
+    make_sample_randomly = False
+    memo = ""
+    if args.random_context_sample:
+        make_sample_randomly = True
+        memo = "random"
+
     # train 컨텍스트 추출
-    train_context_dict = build_context_dict(df_train, args.num_sampled_code_cell)
+    train_context_dict = build_context_dict(
+        df_train, args.num_sampled_code_cell, make_sample_randomly=make_sample_randomly
+    )
     json.dump(
         train_context_dict,
-        open(f"{args.root_path}/train_ctx_{args.num_sampled_code_cell}.json", "wt"),
+        open(
+            f"{args.root_path}/train{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
+        ),
     )
 
     # validation 컨텍스트 추출
-    valid_context_dict = build_context_dict(df_valid, args.num_sampled_code_cell)
+    valid_context_dict = build_context_dict(
+        df_valid, args.num_sampled_code_cell, make_sample_randomly=make_sample_randomly
+    )
     json.dump(
         valid_context_dict,
-        open(f"{args.root_path}/valid_ctx_{args.num_sampled_code_cell}.json", "wt"),
+        open(
+            f"{args.root_path}/valid{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
+        ),
     )
 
     # extra 추가 버전 컨텍스트 추출
     df_concat_train = pd.read_csv(f"{args.root_path}/concat_train.csv")
     concat_train_context_dict = build_context_dict(
-        df_concat_train, args.num_sampled_code_cell
+        df_concat_train,
+        args.num_sampled_code_cell,
+        make_sample_randomly=make_sample_randomly,
     )
     json.dump(
         concat_train_context_dict,
         open(
-            f"{args.root_path}/concat_train_ctx_{args.num_sampled_code_cell}.json", "wt"
+            f"{args.root_path}/concat_train{memo}_ctx_{args.num_sampled_code_cell}.json",
+            "wt",
         ),
     )
 
