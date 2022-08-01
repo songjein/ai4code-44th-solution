@@ -320,7 +320,7 @@ if __name__ == "__main__":
     json.dump(
         train_context_dict,
         open(
-            f"{args.root_path}/train{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
+            f"{args.root_path}/train_{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
         ),
     )
 
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     json.dump(
         valid_context_dict,
         open(
-            f"{args.root_path}/valid{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
+            f"{args.root_path}/valid_{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
         ),
     )
 
@@ -345,7 +345,7 @@ if __name__ == "__main__":
     json.dump(
         concat_train_context_dict,
         open(
-            f"{args.root_path}/concat_train{memo}_ctx_{args.num_sampled_code_cell}.json",
+            f"{args.root_path}/concat_train_{memo}_ctx_{args.num_sampled_code_cell}.json",
             "wt",
         ),
     )

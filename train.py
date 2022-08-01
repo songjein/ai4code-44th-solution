@@ -220,6 +220,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     seed_everything(args.seed)
 
+    print(json.dumps(vars(args), indent=2))
+
     assert args.train_mode in ["pointwise", "sliding-window-pointwise", "pairwise"]
     assert args.model_name_or_path in [
         "microsoft/codebert-base",
