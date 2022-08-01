@@ -25,7 +25,7 @@ def generate_md_code_pairs(df):
             ).astype("int")
             for code_source, label in zip(df_sub_code_source, labels):
                 if label == 1:
-                    samples.append([md_source[:500], code_source[:500]])
+                    samples.append([md_source[:200], code_source[:200]])
     return samples
 
 
@@ -33,10 +33,10 @@ if __name__ == "__main__":
 
     make_dataset = False
     corpus_path = "./data/text.txt"
-    model_name = "microsoft/codebert-base"
-    max_seq_len = 512
+    model_name = "huggingface/CodeBERTa-small-v1"
+    max_seq_len = 128
     output_path = f"./pretrained_{model_name}"
-    batch_size = 48
+    batch_size = 256
     epochs = 5
 
     if make_dataset:
