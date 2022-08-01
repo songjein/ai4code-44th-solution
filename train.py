@@ -234,7 +234,6 @@ if __name__ == "__main__":
     df_train_md = (
         pd.read_csv(args.train_md_path).drop("parent_id", axis=1).reset_index(drop=True)
     )
-    train_ctx = json.load(open(args.train_context_path))
 
     df_valid_md = (
         pd.read_csv(args.valid_md_path)
@@ -242,7 +241,6 @@ if __name__ == "__main__":
         .dropna()
         .reset_index(drop=True)
     )
-    valid_ctx = json.load(open(args.valid_context_path))
     df_valid = pd.read_csv(args.valid_path)
 
     #: external 데이터에 대한 정보는 없지만, 벨리데이션 셋은 원본 학습 데이터에서만 나왔기 때문에 상관 없음
@@ -253,6 +251,7 @@ if __name__ == "__main__":
     ).str.split()
 
     if args.train_mode == "pointwise":
+        train_ctx = json.load(open(args.train_context_path))
         train_ds = PointwiseDataset(
             df_train_md,
             model_name_or_path=args.model_name_or_path,
@@ -260,6 +259,7 @@ if __name__ == "__main__":
             total_max_len=args.total_max_len,
             ctx=train_ctx,
         )
+        valid_ctx = json.load(open(args.valid_context_path))
         valid_ds = PointwiseDataset(
             df_valid_md,
             model_name_or_path=args.model_name_or_path,
