@@ -32,6 +32,12 @@ def get_ranks(gt, derived):
 
 
 def clean_code(cell):
+    """
+    :param cell: 셀 스트링
+
+    .. note::
+        줄바꿈 교정, 6개 초과 # 제거, URL 제거, 연속 공백 1개로 통일
+    """
     for char in ["\r\n", "\r", "\n"]:
         cell = cell.replace(char, " ")
     cell = re.sub(r"\s{1,}", " ", cell)
@@ -41,32 +47,50 @@ def clean_code(cell):
     return cell
 
 
-def sample_cells(cells, n):
+def sample_cells(cells, n_samples, from_last=False, random_choice=False):
     """
-    .. note::
-        더 똑똑하게 추출하기
+    :param cells: 코드셀 스트링 리스트
+    :param n_samples: 샘플링 횟수
+    :param from_last: 끝을 기준으로 샘플링 (추론시에만 활용)
+    :param random_choice: 각 서브 윈도우에서 유니폼 샘플링 (추론시에만 활용)
     """
-    cells = [clean_code(cell) for cell in cells]
-    if n >= len(cells):
+    if len(cells) <= n_samples:
         return cells
+
+    if from_last:
+        cells = cells[::-1]
+
+    results = []
+    if random_choice:
+        choice_prob = n_samples / len(cells)
+        for cell in cells:
+            if random.random() < choice_prob:
+                results.append(cell)
     else:
-        results = []
-        step = len(cells) / n
+        step = len(cells) / n_samples
         idx = 0
-        while int(np.round(idx)) < len(cells):
-            results.append(cells[int(np.round(idx))])
+        while idx < len(cells):
+            results.append(cells[idx])
             idx += step
-        assert cells[0] in results
-        if cells[-1] not in results:
-            results[-1] = cells[-1]
-        return results
+            idx = int(np.round(idx))
+
+    # 양 끝에 대한 보정
+    if cells[0] not in results:
+        results[0] = cells[0]
+    if cells[-1] not in results:
+        results[-1] = cells[-1]
+
+    if from_last:
+        return results[::-1]
+    return results
 
 
-def build_context_dict(df, num_sampled_code_cell=30):
-    """
-    .. note::
-        더 똑똑하게 추출하기
-    """
+def build_context_dict(
+    df,
+    num_sampled_code_cell=30,
+    make_sample_from_last=False,
+    make_sample_randomly=False,
+):
     features = dict()
     df = df.sort_values("rank").reset_index(drop=True)
     for idx, sub_df in tqdm(df.groupby("id")):
@@ -74,11 +98,15 @@ def build_context_dict(df, num_sampled_code_cell=30):
         total_md = sub_df[sub_df.cell_type == "markdown"].shape[0]
         code_sub_df = sub_df[sub_df.cell_type == "code"]
         total_code = code_sub_df.shape[0]
-        codes = sample_cells(code_sub_df.source.values, num_sampled_code_cell)
+        codes = sample_cells(
+            code_sub_df.source.values,
+            num_sampled_code_cell,
+            from_last=make_sample_from_last,
+            random_choice=make_sample_randomly,
+        )
         features[idx]["total_code"] = total_code
         features[idx]["total_md"] = total_md
         features[idx]["codes"] = codes
-
     return features
 
 
