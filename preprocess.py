@@ -47,6 +47,20 @@ def clean_code(cell):
     cell = "\n".join([sent.strip() for sent in cell.split("\n")])
     return cell
 
+def summary_code_cell(cell: str):
+    """
+    코드셀을 중요 정보 순서로 요약합니다.
+    indentation 이 적을수록 중요한 코드라고 판단합니다.
+    
+    :param cell: 코드셀 스트링
+    :return : 중요 정보 순서로 요약된 코드셀
+    """
+    cell = re.sub(r'\n{1,}', '\n', cell)
+    cell = re.sub(r'\s+\n', '', cell)
+    items = cell.split('\n')
+    items.sort(key=lambda x: len(x)-len(x.lstrip()))
+    cell = '\n'.join(items)
+    return cell
 
 def sample_cells(cells, n_samples, from_last=False, random_choice=False):
     """
