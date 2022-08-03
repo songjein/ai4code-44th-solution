@@ -196,6 +196,8 @@ if __name__ == "__main__":
     random.seed(42)
     args = parser.parse_args()
 
+    df_train = None
+    df_valid = None
     if not args.skip_create_from_scratch:
         os.makedirs(args.root_path, exist_ok=True)
 
@@ -308,22 +310,34 @@ if __name__ == "__main__":
         df_concat_train.to_csv(f"{args.root_path}/concat_train.csv", index=False)
         df_concat_train_md.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
 
-    # 이상한 버그? nan 데이터가 여전히 포함되어 있어 다시 읽은 뒤 없애고 저장
-    # 앞서 분명히 source/rank에 대한 nan row를 없앴는데도 매번 남아 있는 문제
-    pd.read_csv(f"{args.root_path}/train_md.csv").dropna(
-        subset=["source", "rank"]
-    ).to_csv(f"{args.root_path}/train_md.csv", index=False)
-    pd.read_csv(f"{args.root_path}/valid_md.csv").dropna(
-        subset=["source", "rank"]
-    ).to_csv(f"{args.root_path}/valid_md.csv", index=False)
-    df_train = pd.read_csv(f"{args.root_path}/train.csv").dropna(
-        subset=["source", "rank"]
-    )
-    df_train.to_csv(f"{args.root_path}/train.csv", index=False)
-    df_valid = pd.read_csv(f"{args.root_path}/valid.csv").dropna(
-        subset=["source", "rank"]
-    )
-    df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
+        # 이상한 버그? nan 데이터가 여전히 포함되어 있어 다시 읽은 뒤 없애고 저장
+        # 앞서 분명히 source/rank에 대한 nan row를 없앴는데도 매번 남아 있는 문제
+        pd.read_csv(f"{args.root_path}/train_md.csv").dropna(
+            subset=["source", "rank"]
+        ).to_csv(f"{args.root_path}/train_md.csv", index=False)
+        pd.read_csv(f"{args.root_path}/valid_md.csv").dropna(
+            subset=["source", "rank"]
+        ).to_csv(f"{args.root_path}/valid_md.csv", index=False)
+        df_train = pd.read_csv(f"{args.root_path}/train.csv").dropna(
+            subset=["source", "rank"]
+        )
+        df_train.to_csv(f"{args.root_path}/train.csv", index=False)
+        df_valid = pd.read_csv(f"{args.root_path}/valid.csv").dropna(
+            subset=["source", "rank"]
+        )
+        df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
+        df_concat_train = pd.read_csv(f"{args.root_path}/concat_train.csv").dropna(
+            subset=["source", "rank"]
+        )
+        df_concat_train.to_csv(f"{args.root_path}/concat_train.csv", index=False)
+        df_concat_train_md = pd.read_csv(
+            f"{args.root_path}/concat_train_md.csv"
+        ).dropna(subset=["source", "rank"])
+        df_concat_train_md.to_csv(f"{args.root_path}/concat_train_md.csv", index=False)
+
+    if df_train is None or df_valid is None:
+        df_train = pd.read_csv(f"{args.root_path}/train.csv")
+        df_valid = pd.read_csv(f"{args.root_path}/valid.csv")
 
     make_sample_randomly = False
     random_or_not = ""
