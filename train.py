@@ -209,7 +209,15 @@ def train(model, train_loader, valid_loader, df_valid, df_orders, args):
             print(f"recall: {recall}")
             print(f"f1: {f1}")
 
-        torch.save(model.state_dict(), f"./{output_dir}/model_{e}.bin")
+        torch.save(
+            {
+                "model_state": model.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+                "scaler_state": scaler.state_dict(),
+                "scheduler_state": scheduler.state_dict(),
+            },
+            f"./{output_dir}/model_{e}.pt",
+        )
 
     return model
 
