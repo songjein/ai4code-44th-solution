@@ -170,9 +170,7 @@ def train(model, train_loader, valid_loader, df_valid, df_orders, args):
 
             avg_loss = np.round(np.mean(loss_list), 4)
 
-            tbar.set_description(
-                f"Epoch {e + 1} Loss: {avg_loss} lr: {scheduler.get_last_lr()}"
-            )
+            tbar.set_description(f"Epoch {e + 1} Loss: {avg_loss}")
 
         if args.train_mode == "pointwise":
             y_val, y_preds = validate(model, valid_loader)

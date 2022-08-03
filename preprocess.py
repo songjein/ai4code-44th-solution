@@ -17,6 +17,7 @@ parser.add_argument("--num-sampled-code-cell", type=int, default=40)
 parser.add_argument("--window-size", type=int, default=30)
 parser.add_argument("--random-context-sample", action="store_true")
 parser.add_argument("--skip-create-from-scratch", action="store_true")
+parser.add_argument("--memo", type=str, default="")
 
 
 def read_notebook(path):
@@ -47,20 +48,22 @@ def clean_code(cell):
     cell = "\n".join([sent.strip() for sent in cell.split("\n")])
     return cell
 
+
 def summary_code_cell(cell: str):
     """
     코드셀을 중요 정보 순서로 요약합니다.
     indentation 이 적을수록 중요한 코드라고 판단합니다.
-    
+
     :param cell: 코드셀 스트링
     :return : 중요 정보 순서로 요약된 코드셀
     """
-    cell = re.sub(r'\n{1,}', '\n', cell)
-    cell = re.sub(r'\s+\n', '', cell)
-    items = cell.split('\n')
-    items.sort(key=lambda x: len(x)-len(x.lstrip()))
-    cell = '\n'.join(items)
+    cell = re.sub(r"\n{1,}", "\n", cell)
+    cell = re.sub(r"\s+\n", "", cell)
+    items = cell.split("\n")
+    items.sort(key=lambda x: len(x) - len(x.lstrip()))
+    cell = "\n".join(items)
     return cell
+
 
 def sample_cells(cells, n_samples, from_last=False, random_choice=False):
     """
@@ -69,6 +72,7 @@ def sample_cells(cells, n_samples, from_last=False, random_choice=False):
     :param from_last: 끝을 기준으로 샘플링 (추론시에만 활용)
     :param random_choice: 각 서브 윈도우에서 유니폼 샘플링 (추론시에만 활용)
     """
+    cells = [summary_code_cell(cell) for cell in cells]
     if len(cells) <= n_samples:
         return cells
 
@@ -322,10 +326,10 @@ if __name__ == "__main__":
     df_valid.to_csv(f"{args.root_path}/valid.csv", index=False)
 
     make_sample_randomly = False
-    memo = ""
+    random_or_not = ""
     if args.random_context_sample:
         make_sample_randomly = True
-        memo = "random"
+        random_or_not = "_random"
 
     # train 컨텍스트 추출
     train_context_dict = build_context_dict(
@@ -334,7 +338,8 @@ if __name__ == "__main__":
     json.dump(
         train_context_dict,
         open(
-            f"{args.root_path}/train_{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
+            f"{args.root_path}/train_{args.memo}{random_or_not}_ctx_{args.num_sampled_code_cell}.json",
+            "wt",
         ),
     )
 
@@ -345,7 +350,8 @@ if __name__ == "__main__":
     json.dump(
         valid_context_dict,
         open(
-            f"{args.root_path}/valid_{memo}_ctx_{args.num_sampled_code_cell}.json", "wt"
+            f"{args.root_path}/valid_{args.memo}{random_or_not}_ctx_{args.num_sampled_code_cell}.json",
+            "wt",
         ),
     )
 
@@ -359,24 +365,24 @@ if __name__ == "__main__":
     json.dump(
         concat_train_context_dict,
         open(
-            f"{args.root_path}/concat_train_{memo}_ctx_{args.num_sampled_code_cell}.json",
+            f"{args.root_path}/concat_train_{args.memo}{random_or_not}_ctx_{args.num_sampled_code_cell}.json",
             "wt",
         ),
     )
 
-    # 슬라이딩 윈도우기반 컨텍스트 생성
-    train_sliding_window_pairs = build_sliding_window_pairs(df_train, args.window_size)
-    json.dump(
-        train_sliding_window_pairs,
-        open(
-            f"{args.root_path}/train_sliding_window_{args.window_size}_pairs.json", "wt"
-        ),
-    )
+    # # 슬라이딩 윈도우기반 컨텍스트 생성
+    # train_sliding_window_pairs = build_sliding_window_pairs(df_train, args.window_size)
+    # json.dump(
+    #     train_sliding_window_pairs,
+    #     open(
+    #         f"{args.root_path}/train_sliding_window_{args.window_size}_pairs.json", "wt"
+    #     ),
+    # )
 
-    valid_sliding_window_pairs = build_sliding_window_pairs(df_valid, args.window_size)
-    json.dump(
-        valid_sliding_window_pairs,
-        open(
-            f"{args.root_path}/valid_sliding_window_{args.window_size}_pairs.json", "wt"
-        ),
-    )
+    # valid_sliding_window_pairs = build_sliding_window_pairs(df_valid, args.window_size)
+    # json.dump(
+    #     valid_sliding_window_pairs,
+    #     open(
+    #         f"{args.root_path}/valid_sliding_window_{args.window_size}_pairs.json", "wt"
+    #     ),
+    # )
