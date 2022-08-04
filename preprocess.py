@@ -16,6 +16,7 @@ parser.add_argument("--root-path", type=str, default="./data")
 parser.add_argument("--num-sampled-code-cell", type=int, default=40)
 parser.add_argument("--window-size", type=int, default=30)
 parser.add_argument("--random-context-sample", action="store_true")
+parser.add_argument("--insert-cell-order", action="store_true")
 parser.add_argument("--skip-create-from-scratch", action="store_true")
 parser.add_argument("--memo", type=str, default="")
 
@@ -44,6 +45,7 @@ def clean_code(cell):
         cell = cell.replace(char, " ")
     cell = re.sub(r"\s{1,}", " ", cell)
     cell = re.sub(r"#{6,}", "", cell)
+    cell = re.sub(r"-{3,}", "", cell)
     cell = re.sub(r"http\S+[^)]", "", cell)
     cell = "\n".join([sent.strip() for sent in cell.split("\n")])
     return cell
@@ -65,14 +67,30 @@ def summary_code_cell(cell: str):
     return cell
 
 
-def sample_cells(cells, n_samples, from_last=False, random_choice=False):
+def insert_order_to_cell_str(pct: float, cell: str):
+    return f"#{round(pct, 2)} {cell}"
+
+
+def sample_cells(
+    cells, n_samples, from_last=False, random_choice=False, insert_cell_order=False
+):
     """
     :param cells: 코드셀 스트링 리스트
     :param n_samples: 샘플링 횟수
     :param from_last: 끝을 기준으로 샘플링 (추론시에만 활용)
-    :param random_choice: 각 서브 윈도우에서 유니폼 샘플링 (추론시에만 활용)
+    :param random_choice: 각 서브 윈도우에서 유니폼 샘플링
+    :param insert_cell_order: cell의 순서 정보를 cell str에 주입 (#0.42 cell string...)
+
+    .. note::
+        n_samples에 대한 버그가 존재함 len(cells) == 59, n_samples == 30 인 경우
     """
     cells = [summary_code_cell(cell) for cell in cells]
+    if insert_cell_order:
+        cells = [
+            insert_order_to_cell_str(idx / len(cells), cell)
+            for idx, cell in enumerate(cells)
+        ]
+
     if len(cells) <= n_samples:
         return cells
 
@@ -109,6 +127,7 @@ def build_context_dict(
     num_sampled_code_cell=30,
     make_sample_from_last=False,
     make_sample_randomly=False,
+    insert_cell_order=False,
 ):
     features = dict()
     df = df.sort_values("rank").reset_index(drop=True)
@@ -122,6 +141,7 @@ def build_context_dict(
             num_sampled_code_cell,
             from_last=make_sample_from_last,
             random_choice=make_sample_randomly,
+            insert_cell_order=insert_cell_order,
         )
         features[idx]["total_code"] = total_code
         features[idx]["total_md"] = total_md
@@ -347,7 +367,10 @@ if __name__ == "__main__":
 
     # train 컨텍스트 추출
     train_context_dict = build_context_dict(
-        df_train, args.num_sampled_code_cell, make_sample_randomly=make_sample_randomly
+        df_train,
+        args.num_sampled_code_cell,
+        make_sample_randomly=make_sample_randomly,
+        insert_cell_order=args.insert_cell_order,
     )
     json.dump(
         train_context_dict,
@@ -359,7 +382,10 @@ if __name__ == "__main__":
 
     # validation 컨텍스트 추출
     valid_context_dict = build_context_dict(
-        df_valid, args.num_sampled_code_cell, make_sample_randomly=make_sample_randomly
+        df_valid,
+        args.num_sampled_code_cell,
+        make_sample_randomly=make_sample_randomly,
+        insert_cell_order=args.insert_cell_order,
     )
     json.dump(
         valid_context_dict,
@@ -375,6 +401,7 @@ if __name__ == "__main__":
         df_concat_train,
         args.num_sampled_code_cell,
         make_sample_randomly=make_sample_randomly,
+        insert_cell_order=args.insert_cell_order,
     )
     json.dump(
         concat_train_context_dict,
