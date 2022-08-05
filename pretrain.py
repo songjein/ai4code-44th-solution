@@ -25,7 +25,7 @@ def generate_md_code_pairs(df):
             ).astype("int")
             for code_source, label in zip(df_sub_code_source, labels):
                 if label == 1:
-                    samples.append([md_source[:200], code_source[:200]])
+                    samples.append([md_source[:256], code_source[:256]])
     return samples
 
 
@@ -33,11 +33,11 @@ if __name__ == "__main__":
 
     make_dataset = False
     corpus_path = "./data/text.txt"
-    model_name = "huggingface/CodeBERTa-small-v1"
+    model_name = "prajjwal1/bert-small"
     max_seq_len = 128
-    output_path = f"./pretrained_{model_name}"
-    batch_size = 256
-    epochs = 5
+    output_path = f"./pretrained_{max_seq_len}_{model_name}"
+    batch_size = 512
+    epochs = 10
 
     if make_dataset:
         df = pd.read_csv("./data/concat_train.csv")
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         gradient_accumulation_steps=8,
         fp16=True,
         per_device_train_batch_size=batch_size,
-        save_steps=100000,
+        save_steps=1000,
     )
 
     trainer = Trainer(
