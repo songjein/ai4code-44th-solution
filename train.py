@@ -54,6 +54,7 @@ parser.add_argument("--seed", type=int, default=42)
 parser.add_argument("--train-mode", type=str, default="pointwise")
 parser.add_argument("--memo", type=str, default="")
 parser.add_argument("--window-size", type=int, default=30)
+parser.add_argument("--hidden-size", type=int, default=768)
 
 
 def seed_everything(seed=42):
@@ -233,6 +234,7 @@ if __name__ == "__main__":
         "microsoft/codebert-base",
         "microsoft/graphcodebert-base",
         "huggingface/CodeBERTa-small-v1",
+        "prajjwal1/bert-small",
     ]
 
     output_dir = f"outputs_{args.train_mode}_{args.memo}_{args.seed}"
@@ -331,6 +333,6 @@ if __name__ == "__main__":
         drop_last=False,
     )
 
-    model = PercentileRegressor(args.model_name_or_path)
+    model = PercentileRegressor(args.model_name_or_path, hidden_dim=args.hidden_size)
     model = model.cuda()
     model = train(model, train_loader, valid_loader, df_valid, df_orders, args=args)
