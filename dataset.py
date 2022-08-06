@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-from preprocess import clean_code
+from preprocess import clean_code, summary_code_cell
 
 
 class PointwiseDataset(Dataset):
@@ -141,7 +141,7 @@ class PairwiseDataset(Dataset):
             truncation=True,
         )
         code_inputs = self.tokenizer.encode_plus(
-            clean_code(self.id2src[code_cell_id]),
+            clean_code(summary_code_cell(self.id2src[code_cell_id])),
             None,
             add_special_tokens=False,
             max_length=self.code_max_len,
