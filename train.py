@@ -68,22 +68,43 @@ def seed_everything(seed=42):
 
 def generate_pairs_with_label(df, mode="train", negative_seletion_ratio=0.05):
     samples = []
-    for id, df_sub in tqdm(df.groupby("id")):
-        df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
-        df_sub_code = df_sub[df_sub["cell_type"] == "code"]
-        df_sub_code_rank = df_sub_code["rank"].values
-        df_sub_code_cell_id = df_sub_code["cell_id"].values
-        for md_cell_id, md_rank in df_sub_md[["cell_id", "rank"]].values:
-            labels = np.array(
-                [((md_rank + 1) == code_rank) for code_rank in df_sub_code_rank]
-            ).astype("int")
-            for code_cell_id, label in zip(df_sub_code_cell_id, labels):
-                if mode == "test":
-                    samples.append([md_cell_id, code_cell_id, label])
-                elif label == 1:
-                    samples.append([md_cell_id, code_cell_id, label])
-                elif label == 0 and random.uniform(0, 1) < negative_seletion_ratio:
-                    samples.append([md_cell_id, code_cell_id, label])
+    if mode == "test":
+        for id, df_sub in tqdm(df.groupby("id")):
+            df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
+            df_sub_code = df_sub[df_sub["cell_type"] == "code"]
+            df_sub_code_cell_id = df_sub_code["cell_id"].values
+            for md_cell_id, md_rank in df_sub_md[["cell_id", "rank"]].values:
+                for code_cell_id in df_sub_code_cell_id:
+                    samples.append([md_cell_id, code_cell_id, 0])
+    else:
+        for id, df_sub in tqdm(df.groupby("id")):
+            df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
+            df_sub_code = df_sub[df_sub["cell_type"] == "code"]
+            md_ranks_set = set(df_sub_md["rank"].values)
+            code_ranks = df_sub_code["rank"].values
+            df_sub_code_cell_id = df_sub_code["cell_id"].values
+
+            # 3연속 md 까지만 허용(?)
+            for md_cell_id, md_rank in df_sub_md[["cell_id", "rank"]].values:
+                code_id_label_pairs = []
+                for j, code_rank in enumerate(code_ranks):
+                    label = 0
+                    if (md_rank + 1) == code_rank:
+                        label = 1
+                    elif (md_rank + 1) in md_ranks_set:
+                        if (md_rank + 2) == code_rank:
+                            label = 1
+                        elif (md_rank + 2) in md_ranks_set:
+                            if (md_rank + 3) == code_rank:
+                                label = 1
+                    code_id = df_sub_code_cell_id[j]
+                    code_id_label_pairs.append((code_id, label))
+
+                for code_cell_id, label in code_id_label_pairs:
+                    if label == 1:
+                        samples.append([md_cell_id, code_cell_id, label])
+                    elif label == 0 and random.uniform(0, 1) < negative_seletion_ratio:
+                        samples.append([md_cell_id, code_cell_id, label])
     return samples
 
 
@@ -334,5 +355,6 @@ if __name__ == "__main__":
     )
 
     model = PercentileRegressor(args.model_name_or_path, hidden_dim=args.hidden_size)
+    # model = PercentileRegressor("./pretrained_128_prajjwal1/bert-small/", hidden_dim=args.hidden_size)
     model = model.cuda()
     model = train(model, train_loader, valid_loader, df_valid, df_orders, args=args)
