@@ -140,6 +140,7 @@ class PairwiseDataset(Dataset):
             return_token_type_ids=True,
             truncation=True,
         )
+
         code_inputs = self.tokenizer.encode_plus(
             clean_code(summary_code_cell(self.id2src[code_cell_id])),
             None,

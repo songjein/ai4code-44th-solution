@@ -84,6 +84,9 @@ def sample_cells(
     .. note::
         n_samples에 대한 버그가 존재함 len(cells) == 59, n_samples == 30 인 경우
     """
+    if len(cells) == 0:
+        return []
+
     cells = [summary_code_cell(cell) for cell in cells]
     if insert_cell_order:
         cells = [
@@ -97,29 +100,29 @@ def sample_cells(
     if from_last:
         cells = cells[::-1]
 
-    results = []
+    sampled_cells = []
     if random_choice:
         choice_prob = n_samples / len(cells)
         for cell in cells:
             if random.random() < choice_prob:
-                results.append(cell)
+                sampled_cells.append(cell)
     else:
         step = len(cells) / n_samples
         idx = 0
         while idx < len(cells):
-            results.append(cells[idx])
+            sampled_cells.append(cells[idx])
             idx += step
             idx = int(np.round(idx))
 
     # 양 끝에 대한 보정
-    if cells[0] not in results:
-        results[0] = cells[0]
-    if cells[-1] not in results:
-        results[-1] = cells[-1]
+    if cells[0] not in sampled_cells:
+        sampled_cells[0] = cells[0]
+    if cells[-1] not in sampled_cells:
+        sampled_cells[-1] = cells[-1]
 
     if from_last:
-        return results[::-1]
-    return results
+        return sampled_cells[::-1]
+    return sampled_cells
 
 
 def build_context_dict(

@@ -354,7 +354,18 @@ if __name__ == "__main__":
         drop_last=False,
     )
 
-    model = PercentileRegressor(args.model_name_or_path, hidden_dim=args.hidden_size)
-    # model = PercentileRegressor("./pretrained_128_prajjwal1/bert-small/", hidden_dim=args.hidden_size)
+    if args.train_mode == "pairwise":
+        dropout = 0.1
+        model = PercentileRegressor(
+            "./pretrained_128_prajjwal1/bert-small/",
+            hidden_dim=args.hidden_size,
+            dropout=dropout,
+        )
+    else:
+        dropout = 0.1
+        model = PercentileRegressor(
+            args.model_name_or_path, hidden_dim=args.hidden_size, dropout=dropout
+        )
+
     model = model.cuda()
     model = train(model, train_loader, valid_loader, df_valid, df_orders, args=args)
