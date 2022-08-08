@@ -69,15 +69,15 @@ def seed_everything(seed=42):
 def generate_pairs_with_label(df, mode="train", negative_seletion_ratio=0.05):
     samples = []
     if mode == "test":
-        for id, df_sub in tqdm(df.groupby("id")):
+        for n_id, df_sub in tqdm(df.groupby("id")):
             df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
             df_sub_code = df_sub[df_sub["cell_type"] == "code"]
             df_sub_code_cell_id = df_sub_code["cell_id"].values
             for md_cell_id, md_rank in df_sub_md[["cell_id", "rank"]].values:
                 for code_cell_id in df_sub_code_cell_id:
-                    samples.append([md_cell_id, code_cell_id, 0])
+                    samples.append([n_id, md_cell_id, code_cell_id, 0])
     else:
-        for id, df_sub in tqdm(df.groupby("id")):
+        for n_id, df_sub in tqdm(df.groupby("id")):
             df_sub_md = df_sub[df_sub["cell_type"] == "markdown"]
             df_sub_code = df_sub[df_sub["cell_type"] == "code"]
             md_ranks_set = set(df_sub_md["rank"].values)
@@ -102,9 +102,9 @@ def generate_pairs_with_label(df, mode="train", negative_seletion_ratio=0.05):
 
                 for code_cell_id, label in code_id_label_pairs:
                     if label == 1:
-                        samples.append([md_cell_id, code_cell_id, label])
+                        samples.append([n_id, md_cell_id, code_cell_id, label])
                     elif label == 0 and random.uniform(0, 1) < negative_seletion_ratio:
-                        samples.append([md_cell_id, code_cell_id, label])
+                        samples.append([n_id, md_cell_id, code_cell_id, label])
     return samples
 
 

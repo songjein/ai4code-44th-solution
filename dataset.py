@@ -123,17 +123,22 @@ class PairwiseDataset(Dataset):
     ):
         super().__init__()
         self.samples = samples
-        self.id2src = dict(zip(df["cell_id"].values, df["source"].values))
+        unique_ids = [
+            f"{n_id}-{cell_id}"
+            for n_id, cell_id in zip(df["id"].values, df["cell_id"].values)
+        ]
+        self.id2src = dict(zip(unique_ids, df["source"].values))
         self.total_max_len = total_max_len
         self.md_max_len = md_max_len
         self.code_max_len = total_max_len - md_max_len
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
     def __getitem__(self, index):
-        md_cell_id, code_cell_id, label = self.samples[index]
+        n_id, md_cell_id, code_cell_id, label = self.samples[index]
 
+        md_unique_id = f"{n_id}-{md_cell_id}"
         md_inputs = self.tokenizer.encode_plus(
-            clean_code(self.id2src[md_cell_id]),
+            clean_code(self.id2src[md_unique_id]),
             None,
             add_special_tokens=False,
             max_length=self.md_max_len,
@@ -141,8 +146,9 @@ class PairwiseDataset(Dataset):
             truncation=True,
         )
 
+        code_unique_id = f"{n_id}-{code_cell_id}"
         code_inputs = self.tokenizer.encode_plus(
-            clean_code(summary_code_cell(self.id2src[code_cell_id])),
+            clean_code(summary_code_cell(self.id2src[code_unique_id])),
             None,
             add_special_tokens=False,
             max_length=self.code_max_len,
