@@ -47,6 +47,8 @@ def clean_code(cell):
     cell = re.sub(r"#{6,}", "", cell)
     cell = re.sub(r"-{3,}", "", cell)
     cell = re.sub(r"http\S+[^)]", "", cell)
+    cell = re.sub(r"<[^>]+>", "", cell)
+    cell = re.sub(r"\$\$.*\$\$", "", cell)
     cell = "\n".join([sent.strip() for sent in cell.split("\n")])
     return cell
 
@@ -135,7 +137,8 @@ def build_context_dict(
     features = dict()
     df = df.sort_values("rank").reset_index(drop=True)
     for idx, sub_df in tqdm(df.groupby("id")):
-        features[idx] = dict()
+        key = str(idx)
+        features[key] = dict()
         total_md = sub_df[sub_df.cell_type == "markdown"].shape[0]
         code_sub_df = sub_df[sub_df.cell_type == "code"]
         total_code = code_sub_df.shape[0]
@@ -146,9 +149,9 @@ def build_context_dict(
             random_choice=make_sample_randomly,
             insert_cell_order=insert_cell_order,
         )
-        features[idx]["total_code"] = total_code
-        features[idx]["total_md"] = total_md
-        features[idx]["codes"] = codes
+        features[key]["total_code"] = total_code
+        features[key]["total_md"] = total_md
+        features[key]["codes"] = codes
     return features
 
 
