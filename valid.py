@@ -196,32 +196,6 @@ def sorted_code_cells(pred_pairs, sorted_code_cell_ids):
     return sorted_cell_ids
 
 
-def sort_code_cells(n_id, pred_pairs: List[Tuple[str, str, float]], sorted_code_cell_ids: List[str]):
-
-        # md-md, code-md, md-code 셀 정렬
-        cell_orders_dict = defaultdict(int)
-        for cell_id_a, cell_id_b, prob in pred_pairs:
-            if prob > 0.5:
-                cell_orders_dict[cell_id_b] += 1
-            else:
-                cell_orders_dict[cell_id_a] += 1
-
-            if cell_id_a not in cell_orders_dict:
-                cell_orders_dict[cell_id_a] = 0
-
-            if cell_id_b not in cell_orders_dict:
-                cell_orders_dict[cell_id_b] = 0
-
-        sorted_pred_cell_ids = sorted(list(cell_orders_dict.items()), key=lambda x: x[1])
-        sorted_pred_cell_ids = [item[0] for item in sorted_pred_cell_ids]
-
-        # 정렬된 코드셀에 끼워 맞추기
-        for code_cell_id in sorted_code_cell_ids:
-            assert code_cell_id in sorted_pred_cell_ids, f"{code_cell_id} not exist"
-
-        return sorted_pred_cell_ids
-
-
 def predict_ct_pairwise(df_test, model_path, ckpt_path, total_max_len, md_max_len):
 
     model = PercentileRegressor(model_path, hidden_dim=768)
@@ -427,64 +401,44 @@ if __name__ == "__main__":
             md_max_len=48,
         )
 
-        # model_name_or_path = "microsoft/graphcodebert-base"
-        # checkpoint_path = "pointwise-add-data-graphcodebert-40ctx/model_4.bin"
+        model_name_or_path = "microsoft/graphcodebert-base"
+        checkpoint_path = "pointwise-add-data-graphcodebert-40ctx/model_4.bin"
 
-        # valid_context_dict_3 = build_context_dict(
-        #     df_valid, 40, make_sample_from_last=False  # 하나만 한다면 False가 나음
-        # )
+        valid_context_dict_3 = build_context_dict(
+            df_valid, 40, make_sample_from_last=False  # 하나만 한다면 False가 나음
+        )
 
-        # y_test_3 = predict_pointwise(
-        #     df_valid,
-        #     model_path=model_name_or_path,
-        #     ckpt_path=checkpoint_path,
-        #     test_ctx=valid_context_dict_3,
-        #     total_max_len=512,
-        #     md_max_len=48,
-        # )
+        y_test_3 = predict_pointwise(
+            df_valid,
+            model_path=model_name_or_path,
+            ckpt_path=checkpoint_path,
+            test_ctx=valid_context_dict_3,
+            total_max_len=512,
+            md_max_len=48,
+        )
 
-        # model_name_or_path = "microsoft/codebert-base"
-        # checkpoint_path = "pointwise-add-data-codebert-30ctx/model_4.bin"
+        model_name_or_path = "microsoft/codebert-base"
+        checkpoint_path = "pointwise-add-data-codebert-30ctx/model_4.bin"
 
-        # valid_context_dict_4 = build_context_dict(
-        #     df_valid, 30, make_sample_from_last=True
-        # )
+        valid_context_dict_4 = build_context_dict(
+            df_valid, 30, make_sample_from_last=True
+        )
 
-        # y_test_4 = predict_pointwise(
-        #     df_valid,
-        #     model_path=model_name_or_path,
-        #     ckpt_path=checkpoint_path,
-        #     test_ctx=valid_context_dict_4,
-        #     total_max_len=512,
-        #     md_max_len=48,
-        # )
+        y_test_4 = predict_pointwise(
+            df_valid,
+            model_path=model_name_or_path,
+            ckpt_path=checkpoint_path,
+            test_ctx=valid_context_dict_4,
+            total_max_len=512,
+            md_max_len=48,
+        )
 
         # preds_pointwise = (y_test_1 + y_test_2 + y_test_3 + y_test_4) / 4
-        preds_pointwise = (y_test_1 + y_test_2) / 2
 
-        # preds_pointwise = (
-        #     0.8 * (0.65 * (0.4 * y_test_1 + 0.6 * y_test_2) + 0.35 * y_test_3)
-        #     + 0.2 * y_test_4
-        # )
-
-        # aw = [round(n / 100, 4) for n in range(20, 95)]
-        # bw = [round(1.0 - w, 4) for w in aw]
-
-        # a = np.array(preds_pointwise)
-        # b = np.array(y_test_4)
-
-        # df_valid["rank"] = df_valid.groupby(["id", "cell_type"]).cumcount()
-        # df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(pct=True)
-        # for _aw, _bw in zip(aw, bw):
-        #     preds = a * _aw + b * _bw
-        #     df_valid.loc[df_valid["cell_type"] == "markdown", "pred"] = preds
-        #     pred_orders = (
-        #         df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
-        #     )
-        #     print(
-        #         f"Preds score ({_aw}, {_bw})",
-        #         kendall_tau(df_orders.loc[pred_orders.index], pred_orders),
-        #     )
+        preds_pointwise = (
+            0.8 * (0.65 * (0.4 * y_test_1 + 0.6 * y_test_2) + 0.35 * y_test_3)
+            + 0.2 * y_test_4
+        )
 
         df_valid["pred"] = df_valid.groupby(["id", "cell_type"])["rank"].rank(pct=True)
         df_valid.loc[df_valid["cell_type"] == "markdown", "pred"] = preds_pointwise
@@ -535,7 +489,6 @@ if __name__ == "__main__":
             total_max_len=128,
             md_max_len=64,
         )
-        # df_valid.loc[df_valid["cell_type"] == "markdown", "pred"] = preds_pairwise
         pred_orders = df_valid.sort_values("pred").groupby("id")["cell_id"].apply(list)
 
         print("Preds score", kendall_tau(df_orders.loc[pred_orders.index], pred_orders))
