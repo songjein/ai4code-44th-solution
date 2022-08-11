@@ -34,7 +34,7 @@ def get_ranks(gt, derived):
     return [gt.index(d) for d in derived]
 
 
-def clean_code(cell):
+def clean_code(cell, remove_parenthesis=False):
     """
     :param cell: 셀 스트링
 
@@ -50,10 +50,10 @@ def clean_code(cell):
     cell = re.sub(r"<[^>]+>", "", cell)
     cell = re.sub(r"\$\$.*?\$\$", "", cell)
     cell = re.sub(r"\$.*?\$", "", cell)
-    cell = re.sub(r"\.*\$", "", cell)
-    cell = re.sub(r"\([^)]*?\)", "()", cell)
-    cell = re.sub(r"\{[^)]*?\}", "{}", cell)
-    cell = re.sub(r"\[[^)]*?\]", "[]", cell)
+    if remove_parenthesis:
+        cell = re.sub(r"\([^)]*?\)", "()", cell)
+        cell = re.sub(r"\{[^)]*?\}", "{}", cell)
+        cell = re.sub(r"\[[^)]*?\]", "[]", cell)
     cell = "\n".join([sent.strip() for sent in cell.split("\n")])
     return cell
 
