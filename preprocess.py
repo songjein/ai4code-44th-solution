@@ -48,7 +48,12 @@ def clean_code(cell):
     cell = re.sub(r"-{3,}", "", cell)
     cell = re.sub(r"http\S+[^)]", "", cell)
     cell = re.sub(r"<[^>]+>", "", cell)
-    cell = re.sub(r"\$\$.*\$\$", "", cell)
+    cell = re.sub(r"\$\$.*?\$\$", "", cell)
+    cell = re.sub(r"\$.*?\$", "", cell)
+    cell = re.sub(r"\.*\$", "", cell)
+    cell = re.sub(r'\([^)]*?\)', '()', cell)
+    cell = re.sub(r'\{[^)]*?\}', '{}', cell)
+    cell = re.sub(r'\[[^)]*?\]', '[]', cell)
     cell = "\n".join([sent.strip() for sent in cell.split("\n")])
     return cell
 
